@@ -336,6 +336,23 @@ def make_asymmetry_summary_table(table, by="coding_strand", as_proportion=False,
     return summary_table
 
 
+def calculate_orientation_bias_by_coding_strand(table):
+    results = table.groupby("alt", axis=1).agg(sum)
+    results = results.loc[idx[:, :, "F1R2"]] / results.loc[idx[:, :, "F2R1"]]
+    return results
+
+
+def calculate_strand_bias_by_coding_strand(table):
+    results = table.groupby(["reference", "coding_strand"]).agg(sum)
+    results = results.groupby("alt", axis=1).agg(_agg_div_alignment)
+    return results
+
+
+def _agg_div_alignment(df):
+    df = df.droplevel("alt", axis=1)
+    return df.forward / df.reverse
+
+
 def _make_summary_proportion(pair):
     if not len(pair) > 1 or min(pair) == 0:
         return pd.NA
