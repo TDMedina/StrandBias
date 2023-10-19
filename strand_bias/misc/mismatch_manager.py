@@ -1,4 +1,5 @@
 
+import argparse
 import subprocess
 # import random
 
@@ -108,6 +109,15 @@ def make_command(tool, **kwargs):
     return command
 
 
+def _setup_argparse():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-i", "--input-cram", required=True)
+    parser.add_argument("-r", "--reference", required=True)
+    parser.add_argument("-bf", "--bed-forward", required=True)
+    parser.add_argument("-br", "--bed-reverse", required=True)
+    return parser
+
+
 if __name__ == '__main__':
     import sys
-    submit_workflow(*sys.argv[1:])
+    submit_workflow(**vars(_setup_argparse().parse_args(sys.argv[1:])))
