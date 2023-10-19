@@ -78,4 +78,6 @@ samtools mpileup \
 	"${input_bams[@]}" > "${output_file}" 2> "${output_file%.*}.stderr"
 #	"${input_bam}" > "${output_file}" 2> "${output_file%.*}.stderr"
 
+awk 'BEGIN {s=0} {s=s+$4} END {print s}' "${output_file}" > "${output_file%.pileup}.total_base_count.txt"
+
 awk '$5 !~ /^((\^.)?([\.,*#])(\$)?)+$/ {print}' "${output_file}" > "${output_file%.pileup}.no_match_positions.pileup"
