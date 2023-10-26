@@ -106,4 +106,7 @@ python pileup_parser.py \
 	-s \
 	-m "combined"
 
+pileup_dir="$(dirname $(readlink -f ${input_bam}))/pileups/"
+mkdir -p "${pileup_dir}"
+mv "${input_bam%%.bam}"*.no_match_positions.pileup "${pileup_dir}"
 rm "${file_prefix}"*bam "${input_bam%%.bam}"*pileup "${input_bam%%.bam}"*bai
