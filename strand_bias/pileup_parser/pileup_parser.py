@@ -334,7 +334,7 @@ class SamplePileups:
                 table = pileup.tabulate_pileup_counts_against_ref()
                 table = table.reset_index()
                 table = table.rename(columns={"index": "reference"})
-                table["coding_strand"] = coding_region.region_name
+                table["coding_strand"] = coding_region.region_name.split("_", [0])
                 table["orientation"] = orientation
 
                 cat_cols = ["coding_strand", "orientation", "reference"]
