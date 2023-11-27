@@ -279,11 +279,27 @@ class CodingRegionPileups:
         self.F1, self.R2, self.F1R2 = F1, R2, F1R2
         self.F2, self.R1, self.F2R1 = F2, R1, F2R1
 
+    def __str__(self):
+        string = [f"{self.region_name.title()}:"]
+        if not self.orientation_names:
+            string.append("  (None)")
+        else:
+            for ori in self.orientation_names:
+                string.append(f"  - {ori}")
+        string = "\n".join(string)
+        return string
+
     @property
     def orientations(self) -> [Pileup]:
         orientations = [value for ori in _ORIENTATIONS
                         if (value := self.__getattribute__(ori)) is not None]
         return orientations
+
+    @property
+    def orientation_names(self) -> [str]:
+        names = [ori for ori in _ORIENTATIONS
+                 if self.__getattribute__(ori) is not None]
+        return names
 
 
 class SamplePileups:
@@ -292,6 +308,17 @@ class SamplePileups:
                  reverse_coding: CodingRegionPileups):
         self.forward_coding = forward_coding
         self.reverse_coding = reverse_coding
+
+    def __str__(self):
+        string = ["SamplePileups:"]
+        for region in self.regions:
+            if not region.orientation_names:
+                continue
+            string.append(f"  - {region.region_name.title()}")
+            for ori in region.orientation_names:
+                string.append(f"    - {ori}")
+        string = "\n".join(string)
+        return string
 
     @staticmethod
     def read_pileups(file_prefix, include="all"):
