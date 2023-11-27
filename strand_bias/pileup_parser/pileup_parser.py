@@ -405,54 +405,6 @@ class PileupTable:
         pair = pair[0] / pair[1]
         return pair
 
-# def read_pileups_split_by_orientation(file_prefix_id, include="all"):
-#     pileups = dict()
-#     orientations = {"F1R2", "F2R1", "F1", "R2", "F2", "R1"}
-#     if include == "all":
-#         pass
-#     elif include == "combined":
-#         orientations = {"F1R2", "F2R1"}
-#     elif include == "non_combined":
-#         orientations -= {"F1R2", "F2R1"}
-#     for strand in {"forward", "reverse"}:
-#         pileups[strand] = dict()
-#         for orientation in orientations:
-#             file = f"{file_prefix_id}.filtered.{strand}_coding.{orientation}.no_match_positions.pileup"
-#             pileups[strand][orientation] = Pileup(pileup_file=file)
-#             pileups[strand][orientation].count_all_pileup_bases_against_reference()
-#     return pileups
-
-
-# def tabulate_pileups_split_by_orientation(pileups_dict):
-#     tables = []
-#     orientations = ["F1", "R2", "F1R2", "F2", "R1", "F2R1"]
-#     col_dex = MultiIndex.from_product([["A", "C", "G", "T", "match"],
-#                                       ["forward", "reverse"]],
-#                                       names=["alt", "alignment"])
-#
-#     for strand, strand_dict in pileups_dict.items():
-#         for orientation, pileup in strand_dict.items():
-#             table = pileup.tabulate_pileup_counts_against_ref()
-#
-#             table = table.reset_index()
-#             table = table.rename(columns={"index": "reference"})
-#             table["coding_strand"] = strand
-#             table["orientation"] = orientation
-#
-#             cat_cols = ["coding_strand", "orientation", "reference"]
-#             dtypes = [["forward", "reverse"], orientations, list("ACGT")]
-#             for col, dtype in zip(cat_cols, dtypes):
-#                 table[col] = table[col].astype(CategoricalDtype(dtype))
-#             table = table.set_index(["reference", "coding_strand", "orientation"])
-#
-#             tables.append(table)
-#     tables = pd.concat(tables)
-#     tables = tables.sort_index()
-#     tables = tables.loc[:, sorted(tables.columns, key=lambda x: _BASE_ORDER.index(x))]
-#     # tables = tables.loc[:, ["A", "a", "C", "c", "G", "g", "T", "t", ".", ","]]
-#     tables.columns = col_dex
-#     return tables
-
 
 def read_filter_bed(filter_file):
     """Read in a BED file and create large sets of loci.
@@ -468,76 +420,6 @@ def read_filter_bed(filter_file):
             filter_range = range(int(start), int(stop))
             filter_dict[contig].update(set(filter_range))
     return filter_dict
-
-
-# def filter_single_mismatches_in_pileup_dict(pileup_dict):
-#     pileups = {
-#         strand: {ori: pileup.filter_single_mismatches()
-#                  for ori, pileup in ori_dict.items()}
-#         for strand, ori_dict in pileup_dict.items()
-#         }
-#     return pileups
-
-
-# def filter_pileup_positions_in_pileup_dict(pileup_dict, filter_dict):
-#     pileups = {
-#         strand: {ori: pileup.filter_pileup_positions(filter_dict)
-#                  for ori, pileup in ori_dict.items()}
-#         for strand, ori_dict in pileup_dict.items()
-#         }
-#     return pileups
-
-
-# def make_asymmetry_summary_table(table, by="coding_strand", as_proportion=False, as_ratio=False):
-#     summary_table = (
-#         table
-#         .groupby(["reference", by]).agg(sum)
-#         .groupby(axis=1, level="alt").agg(sum)
-#         )
-#     if as_proportion:
-#         summary_table = summary_table.groupby("reference").agg(_make_summary_proportion)
-#     elif as_ratio:
-#         summary_table = summary_table.groupby("reference").agg(_make_summary_ratio)
-#     summary_table = summary_table.loc[["C", "G"], ["A", "T"]]
-#     return summary_table
-#
-#
-# def calculate_orientation_bias_by_coding_strand(table):
-#     results = table.groupby("alt", axis=1).agg(sum)
-#     results = results.loc[idx[:, :, "F1R2"]] / results.loc[idx[:, :, "F2R1"]]
-#     return results
-#
-#
-# def calculate_strand_bias_by_coding_strand(table):
-#     results = table.groupby(["reference", "coding_strand"]).agg(sum)
-#     results = results.groupby("alt", axis=1).agg(_agg_div_alignment)
-#     return results
-#
-#
-# def _agg_div_alignment(df):
-#     df = df.droplevel("alt", axis=1)
-#     return df.forward / df.reverse
-#
-#
-# def _make_summary_proportion(pair):
-#     if not len(pair) > 1 or min(pair) == 0:
-#         return pd.NA
-#     norm = min(pair)
-#     pair = ["1" if val == norm else f"{val/norm:.2f}" for val in pair]
-#     pair = f"{pair[0]}:{pair[1]}"
-#     return pair
-#
-#
-# def _make_summary_ratio(pair):
-#     if not len(pair) > 1 or min(pair) == 0:
-#         return pd.NA
-#     pair = pair[0] / pair[1]
-#     return pair
-
-
-# def read_asymmetry_table(table_path):
-#     table = pd.read_csv(table_path, sep="\t", index_col=[0, 1, 2], header=[0, 1])
-#     return table
 
 
 def main(file_prefix, include="all",
@@ -558,23 +440,6 @@ def main(file_prefix, include="all",
         summary_table = sample_table.pileup_tools.make_asymmetry_summary_table()
         summary_table.to_csv(summary_path, sep="\t", index=True)
     return sample
-
-
-# def main(file_prefix, filter_bed=None, export_path=None, summary_path=None, single_mismatches_only=False,
-#          include="all"):
-#     pileups = read_pileups_split_by_orientation(file_prefix, include)
-#     if filter_bed is not None:
-#         filter_dict = read_filter_bed(filter_bed)
-#         pileups = filter_pileup_positions_in_pileup_dict(pileups, filter_dict)
-#     if single_mismatches_only:
-#         pileups = filter_single_mismatches_in_pileup_dict(pileups)
-#     table = tabulate_pileups_split_by_orientation(pileups)
-#     if export_path is not None:
-#         table.to_csv(export_path, sep="\t", index=True)
-#     if summary_path is not None:
-#         summary = make_asymmetry_summary_table(table)
-#         summary.to_csv(summary_path, sep="\t", index=True)
-#     return table
 
 
 def _setup_argparse():
