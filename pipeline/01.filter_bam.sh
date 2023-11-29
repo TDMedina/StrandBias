@@ -84,7 +84,7 @@ samtools view \
 	--input-fmt-option 'filter=ncigar==1 && ![XA] && ![SA]' \
 	"${input_bam}"
 
-samtools index --threads "${threads}" "${output_bam}"
+samtools index "${output_bam}"
 
 if [ ${pipe_echo} -eq 1 ]; then echo "${output_bam}"; fi
 
