@@ -224,18 +224,19 @@ class Pileup:
         return counter
 
     def count_all_pileup_bases_against_reference(self):
-        if self.pileup_counts_against_ref is not None:
-            return self.pileup_counts_against_ref
+        # if self.pileup_counts_against_ref is not None:
+        #     return self.pileup_counts_against_ref
         ref_counter = {"A": Counter(), "C": Counter(), "G": Counter(), "T": Counter()}
         for pileup_pos in self.pileup_positions:
             ref_counter[pileup_pos.reference] += pileup_pos.pileup_counts
-        self.pileup_counts_against_ref = ref_counter
+        # self.pileup_counts_against_ref = ref_counter
         return ref_counter
 
     def tabulate_pileup_balance_against_ref(self):
-        if self.pileup_counts_against_ref is None:
-            self.count_all_pileup_bases_against_reference()
-        counts = self.pileup_counts_against_ref
+        # if self.pileup_counts_against_ref is None:
+        #     self.count_all_pileup_bases_against_reference()
+        # counts = self.pileup_counts_against_ref
+        counts = self.count_all_pileup_bases_against_reference()
         table = {"A": dict(), "C": dict(), "G": dict(), "T": dict()}
         for base1 in table:
             for base2 in table:
@@ -251,22 +252,29 @@ class Pileup:
         return table
 
     def tabulate_pileup_counts_against_ref(self):
-        if self.pileup_counts_against_ref is None:
-            self.count_all_pileup_bases_against_reference()
-        table = pd.DataFrame.from_dict(self.pileup_counts_against_ref, orient="index")
+        # if self.pileup_counts_against_ref is None:
+        #     self.count_all_pileup_bases_against_reference()
+        counts = self.count_all_pileup_bases_against_reference()
+        table = pd.DataFrame.from_dict(counts, orient="index")
         sorted_cols = sorted(table.columns, key=lambda x: _BASE_ORDER.index(x))
         table = table.loc[:, sorted_cols]
         return table
 
-    def filter_pileup_positions(self, filter_dictionary):
+    def filter_pileup_positions(self, filter_dictionary, inplace=False):
         pileup_positions = [pos for pos in self.pileup_positions
                             if pos.locus[1] not in filter_dictionary[pos.locus[0]]]
+        if inplace:
+            self.pileup_positions = pileup_positions
+            return
         pileup = Pileup(pileup_positions)
         return pileup
 
-    def filter_single_mismatches(self):
+    def filter_single_mismatches(self, inplace=False):
         singles = [pileup_pos for pileup_pos in self.pileup_positions
                    if pileup_pos.count_mismatches() == 1]
+        if inplace:
+            self.pileup_positions = singles
+            return
         pileup = Pileup(singles)
         return pileup
 
@@ -329,7 +337,7 @@ class SamplePileups:
             for orientation in orientations:
                 file = f"{file_prefix}.filtered.{strand}.{orientation}.no_match_positions.pileup"
                 pileups[strand][orientation] = Pileup(pileup_file=file)
-                pileups[strand][orientation].count_all_pileup_bases_against_reference()
+                # pileups[strand][orientation].count_all_pileup_bases_against_reference()
             pileups[strand] = CodingRegionPileups(strand, **pileups[strand])
         pileups = SamplePileups(**pileups)
         return pileups
@@ -341,12 +349,12 @@ class SamplePileups:
     def filter_single_mismatches(self):
         for region in self.regions:
             for pileup in region.orientations:
-                pileup.filter_single_mismatches()
+                pileup.filter_single_mismatches(inplace=True)
 
     def filter_positions(self, filter_dict):
         for region in self.regions:
             for pileup in region.orientations:
-                pileup.filter_pileup_positions(filter_dict)
+                pileup.filter_pileup_positions(filter_dict, inplace=True)
 
     def tabulate(self):
         tables = []
