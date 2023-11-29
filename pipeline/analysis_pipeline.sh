@@ -99,12 +99,13 @@ wait
 sleep 10
 
 # Parse pileups to make summary tables of F1R2 and F2R1 counts.
-file_prefix=$(readlink -f "${input_bam}")
-file_prefix="${file_prefix%%.bam}"
+# file_prefix=$(readlink -f "${input_bam}")
+# file_prefix="${file_prefix%%.bam}"
+file_prefix="${input_bam%%.bam}"
 python pileup_parser.py \
 	-f "${file_prefix}" \
-	-o "${input_bam%%.bam}.asym_table.tsv" \
-	--summary-path "${input_bam%%.bam}.asym_summary_table.tsv" \
+	-o "${file_prefix}.asym_table.tsv" \
+	--summary-path "${file_prefix}.asym_summary_table.tsv" \
 	-s \
 	-m "combined"
 
