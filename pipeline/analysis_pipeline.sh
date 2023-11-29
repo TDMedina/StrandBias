@@ -116,6 +116,6 @@ mkdir "${dest_dir}/flagstats/" "${dest_dir}/logs/" "${dest_dir}/pileups/" "${des
 mv "${dest_dir}/"*.flagstat "${dest_dir}/flagstats/"
 mv "${dest_dir}/"*.std* "${dest_dir}/logs/"
 mv "${dest_dir}/"*.pileup "${dest_dir}/pileups/"
-mv "${dest_dir}/"*.total_base_count "${dest_dir}/total_base_counts/"
+mv "${dest_dir}/"*.total_base_count.txt "${dest_dir}/total_base_counts/"
 
 rm "${file_prefix}"*.bam "${input_bam%%.bam}"*.bai
