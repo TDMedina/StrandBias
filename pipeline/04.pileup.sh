@@ -39,8 +39,7 @@ while getopts ":r:i:o:q:h" arg; do
 			exit 0
 			;;
 		i)
-			# input_bams="${OPTARG}"
-			mapfile -d "," -t input_bams < <(echo -n "${OPTARG}")
+			IFS="," read -a input_bams < <(echo "${OPTARG}")
 			;;
 		o)
 			output_file="${OPTARG}"

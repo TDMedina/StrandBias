@@ -60,7 +60,7 @@ bash 00.flagstat.sh -i "${input_bam}" &
 
 # 1: Filter BAM, then flagstat result in background.
 bash 01.filter_bam.sh -t 5 -i "${input_bam}" -r "${reference}" -o "${filtered}" \
-	&& { 00.flagstat.sh -i "${filtered}" & }
+	&& { bash 00.flagstat.sh -i "${filtered}" & }
 
 # 2-4: Subset by strand, subset by orientation, and run pileup.
 declare -A strands
@@ -81,6 +81,7 @@ wait
 
 sleep 10
 
+# Merge F and R reads to make F1R2 and F2R1 bams.
 for strand in "${!strands[@]}"; do
 	orientations=("F1R2" "F2R1")
 	for ori in "${orientations[@]}"; do
@@ -97,6 +98,7 @@ wait
 
 sleep 10
 
+# Parse pileups to make summary tables of F1R2 and F2R1 counts.
 file_prefix=$(readlink -f "${input_bam}")
 file_prefix="${file_prefix%%.bam}"
 python pileup_parser.py \
@@ -106,4 +108,13 @@ python pileup_parser.py \
 	-s \
 	-m "combined"
 
-rm "${file_prefix}"*bam "${input_bam%%.bam}"*pileup "${input_bam%%.bam}"*bai
+
+# Clean up.
+dest_dir="$(dirname "${input_bam}")"
+mkdir "${dest_dir}/flagstats/" "${dest_dir}/logs/" "${dest_dir}/pileups/" "${dest_dir}/total_base_counts/"
+mv "${dest_dir}/"*.flagstat "${dest_dir}/flagstats/"
+mv "${dest_dir}/"*.std* "${dest_dir}/logs/"
+mv "${dest_dir}/"*.pileup "${dest_dir}/pileups/"
+mv "${dest_dir}/"*.total_base_count "${dest_dir}/total_base_counts/"
+
+rm "${file_prefix}"*.bam "${input_bam%%.bam}"*.bai

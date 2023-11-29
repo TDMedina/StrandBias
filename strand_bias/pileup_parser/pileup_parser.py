@@ -401,14 +401,18 @@ class PileupTable:
         summary_table = summary_table.loc[["C", "G"], ["A", "T"]]
         return summary_table
 
-    def calculate_orientation_bias_by_coding_strand(self):
+    def calculate_orientation_bias_by_coding_strand(self, drop_non_ox=True):
         results = self._obj.groupby("alt", axis=1).agg(sum)
         results = results.loc[idx[:, :, "F1R2"]] / results.loc[idx[:, :, "F2R1"]]
+        if drop_non_ox:
+            results = results.loc[idx[["C", "G"], :], ["A", "T"]]
         return results
 
-    def calculate_strand_bias_by_coding_strand(self):
+    def calculate_strand_bias_by_coding_strand(self, drop_non_ox=True):
         results = self._obj.groupby(["reference", "coding_strand"]).agg(sum)
         results = results.groupby("alt", axis=1).agg(self._agg_div_alignment)
+        if drop_non_ox:
+            results = results.loc[idx[["C", "G"], :], ["A", "T"]]
         return results
 
     @staticmethod
@@ -441,7 +445,7 @@ def read_filter_bed(filter_file):
     filter_dict = dict()
     with open(filter_file) as infile:
         for line in infile:
-            contig, start, stop = line.strip().split("\t")
+            contig, start, stop = line.strip().split("\t")[:3]
             if contig not in filter_dict:
                 filter_dict[contig] = set()
             filter_range = range(int(start), int(stop))
