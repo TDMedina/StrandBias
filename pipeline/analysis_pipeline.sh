@@ -112,10 +112,14 @@ python pileup_parser.py \
 
 # Clean up.
 dest_dir="$(dirname "${input_bam}")"
+file_id="$(basename "${input_bam}")"
+file_id="${file_id%%.bam}"
+
 mkdir "${dest_dir}/flagstats/" "${dest_dir}/logs/" "${dest_dir}/pileups/" "${dest_dir}/total_base_counts/"
 mv "${dest_dir}/"*.flagstat "${dest_dir}/flagstats/"
 mv "${dest_dir}/"*.std* "${dest_dir}/logs/"
-mv "${dest_dir}/"*.pileup "${dest_dir}/pileups/"
+tar -zcf "${dest_dir}/pileups/${file_id}.pileups.tar.gz" "${dest_dir}/"*.pileup
+rm "${dest_dir}/"*.pileup
 mv "${dest_dir}/"*.total_base_count.txt "${dest_dir}/total_base_counts/"
 
 rm "${file_prefix}"*.bam "${input_bam%%.bam}"*.bai
