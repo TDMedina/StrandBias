@@ -472,7 +472,7 @@ def read_filter_bed(filter_file):
 
 def main(file_prefix, include="all",
          single_mismatches_only=False, filter_bed=None,
-         export_path=None, summary_path=None):
+         export_path=None, summary_path=None, **kwargs):
     sample = SamplePileups.read_pileups(file_prefix, include)
     if single_mismatches_only:
         sample.filter_single_mismatches()
@@ -531,9 +531,18 @@ def _setup_argparse():
                         action="store_true")
     parser.add_argument("-m", "--include-mode", dest="include",
                         choices=["all", "combined", "non_combined"])
+    parser.add_argument("--low-memory", action="store_true")
     return parser
 
 
 if __name__ == '__main__':
     import sys
-    pileup_sample = main(**vars(_setup_argparse().parse_args(sys.argv[1:])))
+    argparser = _setup_argparse()
+    if len(sys.argv) == 1:
+        argparser.print_help()
+        sys.exit()
+    args = argparser.parse_args()
+    if args.low_memory:
+        main_low_mem(**vars(args))
+    else:
+        pileup_sample = main(**vars(args))
