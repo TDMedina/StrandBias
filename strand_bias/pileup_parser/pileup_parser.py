@@ -17,6 +17,7 @@ _ORIENTATIONS = {"F1R2", "F2R1", "F1", "R2", "F2", "R1"}
 _INCLUSION_MAP = {"all": _ORIENTATIONS,
                   "combined": {"F1R2", "F2R1"},
                   "non_combined": _ORIENTATIONS - {"F1R2", "F2R1"}}
+_INCLUSION_MAP.update(dict(zip(_ORIENTATIONS, _ORIENTATIONS)))
 
 
 class PileupBase:
@@ -179,6 +180,7 @@ class Pileup:
     Intended to contain all PileupPosition's from the file.
     """
     def __init__(self, pileup_positions: list[PileupPosition] = None, pileup_file=None,
+                 region=None, orientation=None,
                  skip_match_positions=False, skip_match_bases=False):
         self.pileup_positions = pileup_positions
         if pileup_file is not None:
@@ -188,6 +190,9 @@ class Pileup:
         self.size = len(self.pileup_positions)
         self.pileup_counts = None
         self.pileup_counts_against_ref = None
+
+        self.region = region
+        self.orientation = orientation
 
     @staticmethod
     def _read_pileup_file(pileup_file, skip_match_positions=False, skip_match_bases=False):
@@ -251,13 +256,28 @@ class Pileup:
         table = pd.DataFrame.from_dict(table, orient="index")
         return table
 
-    def tabulate_pileup_counts_against_ref(self):
+    def tabulate_pileup_counts_against_ref(self, multidex=False, include_additional_indices=False):
         # if self.pileup_counts_against_ref is None:
         #     self.count_all_pileup_bases_against_reference()
         counts = self.count_all_pileup_bases_against_reference()
         table = pd.DataFrame.from_dict(counts, orient="index")
+        table.index.name = "reference"
         sorted_cols = sorted(table.columns, key=lambda x: _BASE_ORDER.index(x))
         table = table.loc[:, sorted_cols]
+        if include_additional_indices:
+            table = table.reset_index()
+            table["coding_strand"] = self.region
+            table["orientation"] = self.orientation
+            cat_cols = ["reference", "coding_strand", "orientation"]
+            dtypes = [list("ACGT"), ["forward", "reverse"], _ORIENTATIONS]
+            for col, dtype in zip(cat_cols, dtypes):
+                table[col] = table[col].astype(CategoricalDtype(dtype))
+            table = table.set_index(cat_cols)
+        if multidex:
+            col_dex = MultiIndex.from_product([["A", "C", "G", "T", "match"],
+                                               ["forward", "reverse"]],
+                                              names=["alt", "alignment"])
+            table.columns = col_dex
         return table
 
     def filter_pileup_positions(self, filter_dictionary, inplace=False):
@@ -266,7 +286,7 @@ class Pileup:
         if inplace:
             self.pileup_positions = pileup_positions
             return
-        pileup = Pileup(pileup_positions)
+        pileup = Pileup(pileup_positions, region=self.region, orientation=self.orientation)
         return pileup
 
     def filter_single_mismatches(self, inplace=False):
@@ -275,7 +295,7 @@ class Pileup:
         if inplace:
             self.pileup_positions = singles
             return
-        pileup = Pileup(singles)
+        pileup = Pileup(singles, region=self.region, orientation=self.orientation)
         return pileup
 
 
@@ -336,7 +356,7 @@ class SamplePileups:
             pileups[strand] = dict()
             for orientation in orientations:
                 file = f"{file_prefix}.filtered.{strand}.{orientation}.no_match_positions.pileup"
-                pileups[strand][orientation] = Pileup(pileup_file=file)
+                pileups[strand][orientation] = Pileup(pileup_file=file, region=strand, orientation=orientation)
                 # pileups[strand][orientation].count_all_pileup_bases_against_reference()
             pileups[strand] = CodingRegionPileups(strand, **pileups[strand])
         pileups = SamplePileups(**pileups)
