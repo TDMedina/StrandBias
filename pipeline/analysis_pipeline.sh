@@ -115,7 +115,7 @@ dest_dir="$(dirname "${input_bam}")"
 file_id="$(basename "${input_bam}")"
 file_id="${file_id%%.bam}"
 
-mkdir "${dest_dir}/flagstats/" "${dest_dir}/logs/" "${dest_dir}/pileups/" "${dest_dir}/total_base_counts/"
+mkdir -p "${dest_dir}/flagstats/" "${dest_dir}/logs/" "${dest_dir}/pileups/" "${dest_dir}/total_base_counts/"
 mv "${dest_dir}/"*.flagstat "${dest_dir}/flagstats/"
 mv "${dest_dir}/"*.std* "${dest_dir}/logs/"
 tar -zcf "${dest_dir}/pileups/${file_id}.pileups.tar.gz" "${dest_dir}/"*.pileup
