@@ -378,32 +378,32 @@ class SamplePileups:
 
     def tabulate(self):
         tables = []
-        col_dex = MultiIndex.from_product([["A", "C", "G", "T", "match"],
-                                           ["forward", "reverse"]],
-                                          names=["alt", "alignment"])
+        # col_dex = MultiIndex.from_product([["A", "C", "G", "T", "match"],
+        #                                    ["forward", "reverse"]],
+        #                                   names=["alt", "alignment"])
         for coding_region in [self.forward_coding, self.reverse_coding]:
             for orientation in _ORIENTATIONS:
                 if coding_region.__getattribute__(orientation) is None:
                     continue
                 pileup = coding_region.__getattribute__(orientation)
-                table = pileup.tabulate_pileup_counts_against_ref()
-                table = table.reset_index()
-                table = table.rename(columns={"index": "reference"})
-                table["coding_strand"] = coding_region.region_name.split("_")[0]
-                table["orientation"] = orientation
-
-                cat_cols = ["coding_strand", "orientation", "reference"]
-                dtypes = [["forward", "reverse"], _ORIENTATIONS, list("ACGT")]
-                for col, dtype in zip(cat_cols, dtypes):
-                    table[col] = table[col].astype(CategoricalDtype(dtype))
-                table = table.set_index(["reference", "coding_strand", "orientation"])
+                table = pileup.tabulate_pileup_counts_against_ref(include_additional_indices=True, multidex=True)
+                # table = table.reset_index()
+                # table = table.rename(columns={"index": "reference"})
+                # table["coding_strand"] = coding_region.region_name.split("_")[0]
+                # table["orientation"] = orientation
+                #
+                # cat_cols = ["coding_strand", "orientation", "reference"]
+                # dtypes = [["forward", "reverse"], _ORIENTATIONS, list("ACGT")]
+                # for col, dtype in zip(cat_cols, dtypes):
+                #     table[col] = table[col].astype(CategoricalDtype(dtype))
+                # table = table.set_index(["reference", "coding_strand", "orientation"])
 
                 tables.append(table)
 
         table = pd.concat(tables)
         table = table.sort_index()
-        table = table.loc[:, sorted(table.columns, key=lambda x: _BASE_ORDER.index(x))]
-        table.columns = col_dex
+        # table = table.loc[:, sorted(table.columns, key=lambda x: _BASE_ORDER.index(x))]
+        # table.columns = col_dex
         return table
 
 
