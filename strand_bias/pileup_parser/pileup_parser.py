@@ -274,6 +274,10 @@ class Pileup:
                 table[col] = table[col].astype(CategoricalDtype(dtype))
             table = table.set_index(cat_cols)
         if multidex:
+            for col in set(_BASE_ORDER) - set(table.columns):
+                table[col] = 0
+            sorted_cols = sorted(table.columns, key=lambda x: _BASE_ORDER.index(x))
+            table = table.loc[:, sorted_cols]
             col_dex = MultiIndex.from_product([["A", "C", "G", "T", "match"],
                                                ["forward", "reverse"]],
                                               names=["alt", "alignment"])
@@ -352,11 +356,11 @@ class SamplePileups:
     def read_pileups(file_prefix, include="all"):
         pileups = dict()
         orientations = _INCLUSION_MAP[include]
-        for strand in {"forward_coding", "reverse_coding"}:
+        for strand in ["forward_coding", "reverse_coding"]:
             pileups[strand] = dict()
             for orientation in orientations:
                 file = f"{file_prefix}.filtered.{strand}.{orientation}.no_match_positions.pileup"
-                pileups[strand][orientation] = Pileup(pileup_file=file, region=strand, orientation=orientation)
+                pileups[strand][orientation] = Pileup(pileup_file=file, region=strand.split("_")[0], orientation=orientation)
                 # pileups[strand][orientation].count_all_pileup_bases_against_reference()
             pileups[strand] = CodingRegionPileups(strand, **pileups[strand])
         pileups = SamplePileups(**pileups)
