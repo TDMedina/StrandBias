@@ -1,6 +1,7 @@
 
 import argparse
 from collections import Counter
+import os
 import re
 
 import numpy as np
@@ -382,32 +383,16 @@ class SamplePileups:
 
     def tabulate(self):
         tables = []
-        # col_dex = MultiIndex.from_product([["A", "C", "G", "T", "match"],
-        #                                    ["forward", "reverse"]],
-        #                                   names=["alt", "alignment"])
         for coding_region in [self.forward_coding, self.reverse_coding]:
             for orientation in _ORIENTATIONS:
                 if coding_region.__getattribute__(orientation) is None:
                     continue
                 pileup = coding_region.__getattribute__(orientation)
                 table = pileup.tabulate_pileup_counts_against_ref(include_additional_indices=True, multidex=True)
-                # table = table.reset_index()
-                # table = table.rename(columns={"index": "reference"})
-                # table["coding_strand"] = coding_region.region_name.split("_")[0]
-                # table["orientation"] = orientation
-                #
-                # cat_cols = ["coding_strand", "orientation", "reference"]
-                # dtypes = [["forward", "reverse"], _ORIENTATIONS, list("ACGT")]
-                # for col, dtype in zip(cat_cols, dtypes):
-                #     table[col] = table[col].astype(CategoricalDtype(dtype))
-                # table = table.set_index(["reference", "coding_strand", "orientation"])
-
                 tables.append(table)
 
         table = pd.concat(tables)
         table = table.sort_index()
-        # table = table.loc[:, sorted(table.columns, key=lambda x: _BASE_ORDER.index(x))]
-        # table.columns = col_dex
         return table
 
 
@@ -503,6 +488,37 @@ def main(file_prefix, include="all",
         summary_table = sample_table.pileup_tools.make_asymmetry_summary_table()
         summary_table.to_csv(summary_path, sep="\t", index=True)
     return sample
+
+
+def main_low_mem(file_prefix, include="all",
+                 single_mismatches_only=False, filter_bed=None,
+                 export_path=None, **kwargs):
+    include = _INCLUSION_MAP[include]
+    filter_dict = None
+    if filter_bed is not None:
+        filter_dict = read_filter_bed(filter_bed)
+    temp_paths = []
+    for coding_region in ["forward", "reverse"]:
+        for orientation in include:
+            pileup_file = f"{file_prefix}.filtered.{coding_region}_coding.{orientation}.no_match_positions.pileup"
+            pileup = Pileup(pileup_file=pileup_file, region=coding_region, orientation=orientation)
+            if single_mismatches_only:
+                pileup = pileup.filter_single_mismatches()
+            if filter_dict is not None:
+                pileup = pileup.filter_pileup_positions(filter_dict)
+            pileup_table = pileup.tabulate_pileup_counts_against_ref(multidex=True, include_additional_indices=True)
+            tmp_out = f"{export_path}.{coding_region}_coding.{orientation}.tmp"
+            pileup_table.to_csv(tmp_out, sep="\t", index=True)
+            temp_paths.append(tmp_out)
+    table = []
+    for path in temp_paths:
+        table.append(pd.read_csv(path, sep="\t", index_col=[0, 1, 2], header=[0, 1]))
+    table = pd.concat(table)
+    table.sort_index(inplace=True)
+    table.to_csv(export_path, sep="\t", index=True)
+    for path in temp_paths:
+        os.remove(path)
+    return table
 
 
 def _setup_argparse():
