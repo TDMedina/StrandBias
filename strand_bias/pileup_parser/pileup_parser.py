@@ -548,8 +548,8 @@ def _setup_argparse():
     parser.add_argument("-m", "--include-mode", dest="include",
                         choices=["all", "combined", "non_combined"])
     parser.add_argument("--low-memory", action="store_true")
-    parser.add_argument("--skip-match-positions", actions="store_true")
-    parser.add_argument("--skip-match-bases", actions="store_true")
+    parser.add_argument("--skip-match-positions", action="store_true")
+    parser.add_argument("--skip-match-bases", action="store_true")
     return parser
 
 
