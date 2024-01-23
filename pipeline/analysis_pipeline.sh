@@ -5,12 +5,12 @@ set -euo pipefail
 help () {
 	cat <<- EOF
 
-	${0} -i <input.bam> -f <forward.bed> -v <reverse.bed> -r <reference>
+	${0} [-l] -i <input.bam> -f <forward.bed> -v <reverse.bed> -r <reference>
 
 	EOF
 }
 
-while getopts ":i:r:f:v:h" arg; do
+while getopts ":i:r:f:v:lh" arg; do
 	case "${arg}" in
 		i)
 			input_bam="${OPTARG}"
@@ -23,6 +23,9 @@ while getopts ":i:r:f:v:h" arg; do
 			;;
 		r)
 			reference="${OPTARG}"
+			;;
+		l)
+			low_memory=1
 			;;
 		h)
 			help
@@ -42,6 +45,7 @@ while getopts ":i:r:f:v:h" arg; do
 done
 
 if [ ${OPTIND} -eq 1 ]; then help; exit 0; fi
+if [ -z ${low_memory+x} ]; then low_memory=0; fi
 
 split_by_read_orientation () {
 	local orientations=("F1" "R2" "F2" "R1")
@@ -102,13 +106,23 @@ sleep 10
 # file_prefix=$(readlink -f "${input_bam}")
 # file_prefix="${file_prefix%%.bam}"
 file_prefix="${input_bam%%.bam}"
-python pileup_parser.py \
-	-f "${file_prefix}" \
-	-o "${file_prefix}.asym_table.tsv" \
-	--summary-path "${file_prefix}.asym_summary_table.tsv" \
-	-s \
-	-m "combined"
 
+if [[ "${low_memory}" -eq 0 ]]; then
+	python pileup_parser.py \
+		-f "${file_prefix}" \
+		-o "${file_prefix}.asym_table.tsv" \
+		--summary-path "${file_prefix}.asym_summary_table.tsv" \
+		-s \
+		-m "combined"
+else
+	python pileup_parser.py \
+		-f "${file_prefix}" \
+		-o "${file_prefix}.asym_table.tsv" \
+		--summary-path "${file_prefix}.asym_summary_table.tsv" \
+		-s \
+		-m "combined" \
+		--low-memory
+fi
 
 # Clean up.
 dest_dir="$(dirname "${input_bam}")"
