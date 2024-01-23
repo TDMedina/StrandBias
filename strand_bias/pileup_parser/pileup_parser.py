@@ -137,9 +137,16 @@ class PileupPosition:
         other_data = zip(qual_string, positions)
         bases = re.findall(PILEUP_POS_RE, pileup_string)
         bases = [base + other for base, other in zip(bases, other_data)]
-        bases = [PileupBase(*base) for base in bases]
-        if skip_match_bases:
-            bases = [base for base in bases if not base.is_match]
+        pileup_bases = []
+        while bases:
+            base = bases.pop()
+            base = PileupBase(*base)
+            if skip_match_bases and base.is_match:
+                continue
+            pileup_bases.append(base)
+        # bases = [PileupBase(*base) for base in bases]
+        # if skip_match_bases:
+        #     bases = [base for base in bases if not base.is_match]
         counts = Counter(base.base_code for base in bases)
         return bases, counts
 
@@ -354,14 +361,17 @@ class SamplePileups:
         return string
 
     @staticmethod
-    def read_pileups(file_prefix, include="all"):
+    def read_pileups(file_prefix, include="all", skip_match_positions=False, skip_match_bases=False):
         pileups = dict()
         orientations = _INCLUSION_MAP[include]
         for strand in ["forward_coding", "reverse_coding"]:
             pileups[strand] = dict()
             for orientation in orientations:
                 file = f"{file_prefix}.filtered.{strand}.{orientation}.no_match_positions.pileup"
-                pileups[strand][orientation] = Pileup(pileup_file=file, region=strand.split("_")[0], orientation=orientation)
+                pileups[strand][orientation] = Pileup(
+                    pileup_file=file, region=strand.split("_")[0], orientation=orientation,
+                    skip_match_positions=skip_match_positions, skip_match_bases=skip_match_bases
+                    )
                 # pileups[strand][orientation].count_all_pileup_bases_against_reference()
             pileups[strand] = CodingRegionPileups(strand, **pileups[strand])
         pileups = SamplePileups(**pileups)
@@ -472,8 +482,10 @@ def read_filter_bed(filter_file):
 
 def main(file_prefix, include="all",
          single_mismatches_only=False, filter_bed=None,
-         export_path=None, summary_path=None, **kwargs):
-    sample = SamplePileups.read_pileups(file_prefix, include)
+         export_path=None, summary_path=None,
+         skip_match_positions=False, skip_match_bases=False, **kwargs):
+    sample = SamplePileups.read_pileups(file_prefix, include,
+                                        skip_match_positions=skip_match_positions, skip_match_bases=skip_match_bases)
     if single_mismatches_only:
         sample.filter_single_mismatches()
     if filter_bed is not None:
@@ -492,7 +504,9 @@ def main(file_prefix, include="all",
 
 def main_low_mem(file_prefix, include="all",
                  single_mismatches_only=False, filter_bed=None,
-                 export_path=None, **kwargs):
+                 export_path=None,
+                 skip_match_positions=False, skip_match_bases=False,
+                 **kwargs):
     include = _INCLUSION_MAP[include]
     filter_dict = None
     if filter_bed is not None:
@@ -501,7 +515,8 @@ def main_low_mem(file_prefix, include="all",
     for coding_region in ["forward", "reverse"]:
         for orientation in include:
             pileup_file = f"{file_prefix}.filtered.{coding_region}_coding.{orientation}.no_match_positions.pileup"
-            pileup = Pileup(pileup_file=pileup_file, region=coding_region, orientation=orientation)
+            pileup = Pileup(pileup_file=pileup_file, region=coding_region, orientation=orientation,
+                            skip_match_positions=skip_match_positions, skip_match_bases=skip_match_bases)
             if single_mismatches_only:
                 pileup = pileup.filter_single_mismatches()
             if filter_dict is not None:
@@ -533,6 +548,8 @@ def _setup_argparse():
     parser.add_argument("-m", "--include-mode", dest="include",
                         choices=["all", "combined", "non_combined"])
     parser.add_argument("--low-memory", action="store_true")
+    parser.add_argument("--skip-match-positions", actions="store_true")
+    parser.add_argument("--skip-match-bases", actions="store_true")
     return parser
 
 
