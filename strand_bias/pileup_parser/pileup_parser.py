@@ -147,8 +147,8 @@ class PileupPosition:
         # bases = [PileupBase(*base) for base in bases]
         # if skip_match_bases:
         #     bases = [base for base in bases if not base.is_match]
-        counts = Counter(base.base_code for base in bases)
-        return bases, counts
+        counts = Counter(pileup_base.base_code for pileup_base in pileup_bases)
+        return pileup_bases, counts
 
     @property
     def is_only_matches(self):
