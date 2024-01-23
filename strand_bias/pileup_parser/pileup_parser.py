@@ -510,6 +510,7 @@ def main_low_mem(file_prefix, include="all",
             tmp_out = f"{export_path}.{coding_region}_coding.{orientation}.tmp"
             pileup_table.to_csv(tmp_out, sep="\t", index=True)
             temp_paths.append(tmp_out)
+            del pileup
     table = []
     for path in temp_paths:
         table.append(pd.read_csv(path, sep="\t", index_col=[0, 1, 2], header=[0, 1]))
