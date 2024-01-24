@@ -5,12 +5,24 @@ set -euo pipefail
 help () {
 	cat <<- EOF
 
-	${0} [-l] -i <input.bam> -f <forward.bed> -v <reverse.bed> -r <reference>
+	${0} [-kl] -i <input.bam> -f <forward.bed> -v <reverse.bed> -r <reference.fa>
+
+	-i <input.bam>	BAM file to analyze.
+	-f <forward.bed>	BED file of forward-coding regions in the capture kit.
+	-v <reverse.bed>	BED file of reverse-coding regions in the capture kit.
+	-r <reference.fa>	Reference genome FASTA file.
+
+	-k	Do not count pileup bases that are a match. These counts are output as zeroes.
+	-l	Parse pileups and write temporary tables sequentially to save memory. No summary
+		tables are output in this mode.
 
 	EOF
 }
 
-while getopts ":i:r:f:v:lh" arg; do
+low_memory=""
+skip_match_bases=""
+
+while getopts ":i:r:f:v:klh" arg; do
 	case "${arg}" in
 		i)
 			input_bam="${OPTARG}"
@@ -25,7 +37,10 @@ while getopts ":i:r:f:v:lh" arg; do
 			reference="${OPTARG}"
 			;;
 		l)
-			low_memory=1
+			low_memory="--low-memory"
+			;;
+		k) 
+			skip_match_bases="--skip-match-bases"
 			;;
 		h)
 			help
@@ -45,7 +60,6 @@ while getopts ":i:r:f:v:lh" arg; do
 done
 
 if [ ${OPTIND} -eq 1 ]; then help; exit 0; fi
-if [ -z ${low_memory+x} ]; then low_memory=0; fi
 
 split_by_read_orientation () {
 	local orientations=("F1" "R2" "F2" "R1")
@@ -107,22 +121,16 @@ sleep 10
 # file_prefix="${file_prefix%%.bam}"
 file_prefix="${input_bam%%.bam}"
 
-if [[ "${low_memory}" -eq 0 ]]; then
-	python pileup_parser.py \
-		-f "${file_prefix}" \
-		-o "${file_prefix}.asym_table.tsv" \
-		--summary-path "${file_prefix}.asym_summary_table.tsv" \
-		-s \
-		-m "combined"
-else
-	python pileup_parser.py \
-		-f "${file_prefix}" \
-		-o "${file_prefix}.asym_table.tsv" \
-		--summary-path "${file_prefix}.asym_summary_table.tsv" \
-		-s \
-		-m "combined" \
-		--low-memory
-fi
+
+python pileup_parser.py \
+	-f "${file_prefix}" \
+	-o "${file_prefix}.asym_table.tsv" \
+	--summary-path "${file_prefix}.asym_summary_table.tsv" \
+	-s \
+	-m "combined" \
+	${skip_match_bases} \
+	${low_memory}
+
 
 # Clean up.
 dest_dir="$(dirname "${input_bam}")"
