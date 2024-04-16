@@ -7,8 +7,6 @@ import re
 import numpy as np
 import pandas as pd
 from pandas import CategoricalDtype, MultiIndex
-from pandas import IndexSlice as idx
-from pandas.api.extensions import register_dataframe_accessor
 
 from pileup_regex import PILEUP_POS_RE, FORWARD_BASES, REVERSE_BASES, MATCH_SET
 
@@ -404,65 +402,6 @@ class SamplePileups:
         table = pd.concat(tables)
         table = table.sort_index()
         return table
-
-
-@register_dataframe_accessor("pileup_tools")
-class PileupTable:
-    def __init__(self, pandas_obj):
-        self._obj = pandas_obj
-
-    @staticmethod
-    def read_csv(file_path):
-        table = pd.read_csv(file_path, sep="\t", index_col=[0, 1, 2], header=[0, 1])
-        return table
-
-    def make_asymmetry_summary_table(self, by="coding_strand",
-                                     as_proportion=False, as_ratio=False):
-        summary_table = (self._obj
-                         .groupby(["reference", by]).agg(sum)
-                         .groupby(axis=1, level="alt").agg(sum))
-        if as_proportion:
-            summary_table = summary_table.groupby("reference").agg(self._make_summary_proportion)
-        elif as_ratio:
-            summary_table = summary_table.groupby("reference").agg(self._make_summary_ratio)
-        summary_table = summary_table.loc[["C", "G"], ["A", "T"]]
-        return summary_table
-
-    def calculate_orientation_bias_by_coding_strand(self, drop_non_ox=True):
-        results = self._obj.groupby("alt", axis=1).agg(sum)
-        results = results.loc[idx[:, :, "F1R2"]] / results.loc[idx[:, :, "F2R1"]]
-        if drop_non_ox:
-            results = results.loc[idx[["C", "G"], :], ["A", "T"]]
-        return results
-
-    def calculate_strand_bias_by_coding_strand(self, drop_non_ox=True):
-        results = self._obj.groupby(["reference", "coding_strand"]).agg(sum)
-        results = results.groupby("alt", axis=1).agg(self._agg_div_alignment)
-        if drop_non_ox:
-            results = results.loc[idx[["C", "G"], :], ["A", "T"]]
-        return results
-
-    @staticmethod
-    def _agg_div_alignment(df):
-        df = df.droplevel("alt", axis=1)
-        return df.forward / df.reverse
-
-    @staticmethod
-    def _make_summary_proportion(pair):
-        if not len(pair) > 1 or min(pair) == 0:
-            return pd.NA
-        norm = min(pair)
-        pair = ["1" if val == norm else f"{val/norm:.2f}" for val in pair]
-        pair = f"{pair[0]}:{pair[1]}"
-        return pair
-
-    @staticmethod
-    def _make_summary_ratio(pair):
-        if not len(pair) > 1 or min(pair) == 0:
-            return pd.NA
-        pair = pair[0] / pair[1]
-        return pair
-
 
 def read_filter_bed(filter_file):
     """Read in a BED file and create large sets of loci.
