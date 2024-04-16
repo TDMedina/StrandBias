@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 from pandas import CategoricalDtype, MultiIndex
 
-from call_table import CallTable
+from pileup_table import PileupTable
 from pileup_regex import PILEUP_POS_RE, FORWARD_BASES, REVERSE_BASES, MATCH_SET
 
 _BASE_ORDER = ["A", "a", "C", "c", "G", "g", "T", "t", ".", ","]
