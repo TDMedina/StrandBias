@@ -24,7 +24,6 @@ function help {
 	-i <input.bam>	Input BAM file.
 	-o <output.pileup>	Output pileup file. [Default=<input>.pileup]
 	-r <reference.fasta>	Reference FASTA file. [Default=./reference.fa]
-	-t <int>	Additional threads to assign. [Default=0]
 	-q <int>	Minimum BQ score required [Default=37]
 
 	EOF
@@ -34,7 +33,7 @@ reference="./reference.fa"
 bq=37
 threads=0
 
-while getopts ":r:i:o:t:q:h" arg; do
+while getopts ":r:i:o:q:h" arg; do
 	case "${arg}" in
 		h)
 			help
@@ -48,9 +47,6 @@ while getopts ":r:i:o:t:q:h" arg; do
 			;;
 		r)
 			reference="${OPTARG}"
-			;;
-		t)
-			threads="${OPTARG}"
 			;;
 		q)
 			bq="${OPTARG}"
@@ -74,7 +70,6 @@ if [ -z ${input_bams+x} ]; then echo "Missing required argument: -i"; help; exit
 if [ -z ${output_file+x} ]; then output_file="${input_bams[0]%%.bam}.pileup"; fi
 
 samtools mpileup \
-	--threads "${threads}" \
 	--fasta-ref "${reference}" \
 	--no-BAQ \
 	--min-BQ "${bq}" \
