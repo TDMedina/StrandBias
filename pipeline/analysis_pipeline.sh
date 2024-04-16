@@ -71,11 +71,16 @@ split_by_read_orientation () {
 	done
 }
 
+
+
 if [[ "${input_bam}" == *bam ]]; then
-	filtered="${input_bam%%.bam}.filtered.bam"
+	file_prefix="${input_bam%%.bam}"
 elif [[ "${input_bam}" == *cram ]]; then
-	filtered="${input_bam%%.cram}.filtered.bam"
+	file_prefix="${input_bam%%.cram}"
 fi
+
+filtered="${file_prefix}.filtered.bam"
+
 
 # Baseline flagstat in background.
 bash 00.flagstat.sh -i "${input_bam}" &
@@ -123,7 +128,7 @@ sleep 10
 # Parse pileups to make summary tables of F1R2 and F2R1 counts.
 # file_prefix=$(readlink -f "${input_bam}")
 # file_prefix="${file_prefix%%.bam}"
-file_prefix="${input_bam%%.bam}"
+
 
 
 python pileup_parser.py \
