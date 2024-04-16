@@ -71,7 +71,11 @@ split_by_read_orientation () {
 	done
 }
 
-filtered="${input_bam%%.bam}.filtered.bam"
+if [[ "${input_bam}" == *bam ]]; then
+	filtered="${input_bam%%.bam}.filtered.bam"
+elif [[ "${input_bam}" == *cram ]]; then
+	filtered="${input_bam%%.cram}.filtered.bam"
+fi
 
 # Baseline flagstat in background.
 bash 00.flagstat.sh -i "${input_bam}" &
