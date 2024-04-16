@@ -24,6 +24,7 @@ function help {
 	-i <input.bam>	Input BAM file.
 	-o <output.pileup>	Output pileup file. [Default=<input>.pileup]
 	-r <reference.fasta>	Reference FASTA file. [Default=./reference.fa]
+	-t <int>	Additional threads to assign. [Default=0]
 	-q <int>	Minimum BQ score required [Default=37]
 
 	EOF

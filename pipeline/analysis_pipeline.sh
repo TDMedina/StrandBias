@@ -12,6 +12,8 @@ help () {
 	-v <reverse.bed>	BED file of reverse-coding regions in the capture kit.
 	-r <reference.fa>	Reference genome FASTA file.
 
+	-t <int>	Additional threads to assign. [Default=0]
+
 	-k	Do not count pileup bases that are a match. These counts are output as zeroes.
 	-l	Parse pileups and write temporary tables sequentially to save memory. No summary
 		tables are output in this mode.
@@ -21,8 +23,9 @@ help () {
 
 low_memory=""
 skip_match_bases=""
+threads=0
 
-while getopts ":i:r:f:v:klh" arg; do
+while getopts ":i:r:f:v:t:klh" arg; do
 	case "${arg}" in
 		i)
 			input_bam="${OPTARG}"
@@ -35,6 +38,9 @@ while getopts ":i:r:f:v:klh" arg; do
 			;;
 		r)
 			reference="${OPTARG}"
+			;;
+		t)
+			threads="${OPTARG}"
 			;;
 		l)
 			low_memory="--low-memory"
@@ -65,8 +71,8 @@ split_by_read_orientation () {
 	local orientations=("F1" "R2" "F2" "R1")
 	for ori in "${orientations[@]}"; do
 		local ori_subset="${2%%.bam}.${ori}.bam"
-		{ bash 03.split_by_read_orientation.sh -d "${ori}" -o "${ori_subset}" -r "${1}" -i "${2}" \
-			&& { bash 04.pileup.sh -r "${reference}" -i "${ori_subset}" & \
+		{ bash 03.split_by_read_orientation.sh -t "${threads}" -d "${ori}" -o "${ori_subset}" -r "${1}" -i "${2}" \
+			&& { bash 04.pileup.sh -t "${threads}" -r "${reference}" -i "${ori_subset}" & \
 				bash 00.flagstat.sh -i "${ori_subset}" & } } &
 	done
 }
@@ -86,7 +92,7 @@ filtered="${file_prefix}.filtered.bam"
 bash 00.flagstat.sh -i "${input_bam}" &
 
 # 1: Filter BAM, then flagstat result in background.
-bash 01.filter_bam.sh -t 5 -i "${input_bam}" -r "${reference}" -o "${filtered}" \
+bash 01.filter_bam.sh -t "${threads}" -i "${input_bam}" -r "${reference}" -o "${filtered}" \
 	&& { bash 00.flagstat.sh -i "${filtered}" & }
 
 # 2-4: Subset by strand, subset by orientation, and run pileup.
@@ -97,6 +103,7 @@ strands["reverse"]="${bed_reverse}"
 for strand in "${!strands[@]}"; do
 	region_subset="${filtered%%.bam}.${strand}_coding.bam"
 	{ bash 02.subset_bam_by_region.sh \
+		-t "${threads}" \
 		-i "${filtered}" \
 		-r "${reference}" \
 		-b "${strands[${strand}]}" \
@@ -118,7 +125,7 @@ for strand in "${!strands[@]}"; do
 			-a "${filtered%.bam}.${strand}_coding.${ori:2}.bam" \
 			-b "${filtered%.bam}.${strand}_coding.${ori::2}.bam" \
 			-o "${merged}" \
-			&& bash 04.pileup.sh -r "${reference}" -i "${merged}" -o "${merged%.bam}.pileup" &
+			&& bash 04.pileup.sh -t "${threads}" -r "${reference}" -i "${merged}" -o "${merged%.bam}.pileup" &
 	done
 done
 wait
