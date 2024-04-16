@@ -25,14 +25,16 @@ function help {
 		-o <output.bam>	Output BAM file. [Default=<input>.<orienation>.bam]
 		-d {F1,F2,R1,R2}	Read orientation to extract.
 		-r <reference.fasta>	Reference FASTA file. [Default=./reference.fa]
+		-t <int>	Additional threads to assign. [Default=0]
 		-p	If set, script will echo the output name for pipeline purposes.		
 	EOF
 }
 
 reference="./reference.fa"
 pipe_echo=0
+threads=0
 
-while getopts ":r:i:o:d:ph" arg; do
+while getopts ":r:i:o:d:t:ph" arg; do
 	case "${arg}" in
 		r)
 			reference="${OPTARG}"
@@ -65,6 +67,9 @@ while getopts ":r:i:o:d:ph" arg; do
 					;;
 			esac
 			;;
+		t)
+			threads="${OPTARG}"
+			;;
 		p)
 			pipe_echo=1
 			;;
@@ -96,6 +101,7 @@ if [ -z ${output_bam+x} ]; then output_bam="${input_bam%%.bam}.${orientation}.ba
 # echo "input=${input_bam} output=${output_bam} orientation=${orientation} flag=${flag}"
 
 samtools view \
+	--threads "${threads}" \
 	--reference "${reference}" \
 	--output "${output_bam}" \
 	--bam \

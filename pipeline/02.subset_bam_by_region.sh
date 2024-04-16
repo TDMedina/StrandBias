@@ -26,6 +26,7 @@ function help {
 	-s <region_name>	Label to use for default output name. Ignored if -o is used.
 	-o <output.bam>	Output BAM file. [Default=<input>.<region_name>.bam]
 	-r <reference.fasta>	Reference FASTA file. [Default=./reference.fa]
+	-t <int>	Additional threads to assign. [Default=0]
 	-p	If set, script will echo the output name for pipeline purposes.	
 
 	EOF
@@ -33,8 +34,9 @@ function help {
 
 reference="./reference.fa"
 pipe_echo=0
+threads=0
 
-while getopts ":i:b:s:o:r:ph" arg; do
+while getopts ":i:b:s:o:t:r:ph" arg; do
 	case "${arg}" in
 		h)
 			help
@@ -54,6 +56,9 @@ while getopts ":i:b:s:o:r:ph" arg; do
 			;;
 		r)
 			reference="${OPTARG}"
+			;;
+		t)
+			threads="${OPTARG}"
 			;;
 		p)
 			pipe_echo=1
@@ -79,6 +84,7 @@ if [ -z ${output_bam+x} ]; then if [ -z ${region_name+x} ]; then echo "Missing r
 
 
 samtools view \
+	--threads "${threads}" \
 	--reference "${reference}" \
 	--region-file "${bed}" \
 	--output "${output_bam}" \

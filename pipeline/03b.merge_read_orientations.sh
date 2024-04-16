@@ -25,6 +25,7 @@ function help {
 	-b <input2.bam>	Second input BAM file.
 	-d <orientation_label>	Label to use for default output name. Ignored if -o is used.
 	-o <output.bam>	Output BAM file. [Default=<input1>.<orientation>.bam]
+	-t <int>	Additional threads to assign. [Default=0]
 	-r <reference.fasta>	Reference FASTA file. [Default=./reference.fa]
 	-p	If set, script will echo the output name for pipeline purposes.
 
@@ -33,8 +34,9 @@ function help {
 
 reference="./reference.fa"
 pipe_echo=0
+threads=0
 
-while getopts ":r:a:b:d:o:ph" arg; do
+while getopts ":r:a:b:d:o:t:ph" arg; do
 	case "${arg}" in
 		h)
 			help
@@ -54,6 +56,9 @@ while getopts ":r:a:b:d:o:ph" arg; do
 			;;
 		r)
 			reference="${OPTARG}"
+			;;
+		t)
+			threads="${OPTARG}"
 			;;
 		p)
 			pipe_echo=1
@@ -79,6 +84,7 @@ if [ -z ${output_bam+x} ]; then output_bam="${input_bam%%.bam}.filtered.bam"; fi
 if [ -z ${output_bam+x} ]; then if [ -z ${label+x} ]; then echo "Missing required argument for default output naming: -d"; help; exit 1; fi; output_bam="${input_bam_1%.*.bam}.${label}.bam"; fi
 
 samtools merge \
+	--threads "${threads}" \
 	-o "${output_bam}" \
 	"${input_bam_1}" \
 	"${input_bam_2}"
