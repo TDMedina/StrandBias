@@ -72,7 +72,7 @@ split_by_read_orientation () {
 	for ori in "${orientations[@]}"; do
 		local ori_subset="${2%%.bam}.${ori}.bam"
 		{ bash 03.split_by_read_orientation.sh -t "${threads}" -d "${ori}" -o "${ori_subset}" -r "${1}" -i "${2}" \
-			&& { bash 04.pileup.sh -t "${threads}" -r "${reference}" -i "${ori_subset}" & \
+			&& { bash 04.pileup.sh  -r "${reference}" -i "${ori_subset}" & \
 				bash 00.flagstat.sh -i "${ori_subset}" & } } &
 	done
 }
