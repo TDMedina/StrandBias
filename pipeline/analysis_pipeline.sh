@@ -125,18 +125,12 @@ for strand in "${!strands[@]}"; do
 			-a "${filtered%.bam}.${strand}_coding.${ori:2}.bam" \
 			-b "${filtered%.bam}.${strand}_coding.${ori::2}.bam" \
 			-o "${merged}" \
-			&& bash 04.pileup.sh -t "${threads}" -r "${reference}" -i "${merged}" -o "${merged%.bam}.pileup" &
+			&& bash 04.pileup.sh -r "${reference}" -i "${merged}" -o "${merged%.bam}.pileup" &
 	done
 done
 wait
 
 sleep 10
-
-# Parse pileups to make summary tables of F1R2 and F2R1 counts.
-# file_prefix=$(readlink -f "${input_bam}")
-# file_prefix="${file_prefix%%.bam}"
-
-
 
 python pileup_parser.py \
 	-f "${file_prefix}" \
@@ -154,12 +148,3 @@ file_id="$(basename "${input_bam}")"
 file_id="${file_id%%.bam}"
 
 bash 05.cleanup.sh -d "${dest_dir}" -f "${file_id}"
-
-# mkdir -p "${dest_dir}/flagstats/" "${dest_dir}/logs/" "${dest_dir}/pileups/" "${dest_dir}/total_base_counts/"
-# mv "${dest_dir}/"*.flagstat "${dest_dir}/flagstats/"
-# mv "${dest_dir}/"*.std* "${dest_dir}/logs/"
-# tar -zcf "${dest_dir}/pileups/${file_id}.pileups.tar.gz" "${dest_dir}/"*.pileup
-# rm "${dest_dir}/"*.pileup
-# mv "${dest_dir}/"*.total_base_count.txt "${dest_dir}/total_base_counts/"
-
-# rm "${file_prefix}"*.bam "${input_bam%%.bam}"*.bai

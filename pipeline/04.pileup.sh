@@ -31,7 +31,6 @@ function help {
 
 reference="./reference.fa"
 bq=37
-threads=0
 
 while getopts ":r:i:o:q:h" arg; do
 	case "${arg}" in
