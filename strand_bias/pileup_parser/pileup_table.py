@@ -107,6 +107,41 @@ class ConcatenatedPileupTable:
             table[ratio_label] = ratios
         return table
 
+    def simplify_for_transcription_asymmetry(self, change_numerator, change_denominator,
+                                             add_ratio_column=True, log_transform_ratio=False,
+                                             add_fraction_column=True,
+                                             normalization_counts=None, normalization_factor=1):
+        table = (self._obj
+                 .groupby(["project_id", "case_id", "file_id", "reference", "coding_strand"])
+                 .agg(sum)
+                 .groupby("alt", axis=1)
+                 .agg(sum))
+        table = table.unstack(level=-2)[[tuple(reversed(change_numerator)),
+                                         tuple(reversed(change_denominator))]]
+        table.columns = [change_numerator, change_denominator]
+        numerator = (table.loc[idx[:, :, :, "forward"], change_numerator].droplevel("coding_strand")
+                     + table.loc[idx[:, :, :, "reverse"], change_denominator].droplevel("coding_strand"))
+        denominator = (table.loc[idx[:, :, :, "forward"], change_denominator].droplevel("coding_strand")
+                       + table.loc[idx[:, :, :, "reverse"], change_numerator].droplevel("coding_strand"))
+        table = pd.DataFrame({change_numerator: numerator, change_denominator: denominator})
+
+        # if normalization_counts is not None:
+        #     for col in table.columns:
+        #         table[col] = table[col] / normalization_counts[col[0]] * normalization_factor
+
+        if add_ratio_column:
+            ratio_label = f"{change_numerator}{change_denominator}_ratio".lower()
+            ratios = table[change_numerator] / table[change_denominator]
+            if log_transform_ratio:
+                ratios = log2(ratios)
+            table[ratio_label] = ratios
+        if add_fraction_column:
+            ratio_label = f"{change_numerator}{change_denominator}_fraction".lower()
+            ratios = (table[change_numerator]
+                      / (table[change_denominator] + table[change_numerator]))
+            table[ratio_label] = ratios
+        return table
+
     def subset_oxo_nucleotides(self):
         table = self._obj.loc[idx[:, ["C", "G"], :, :], ["A", "T"]]
         return table
