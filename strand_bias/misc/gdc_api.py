@@ -66,11 +66,14 @@ def retrieve_file_information(sequencing_type):
         "file_name",
         "file_size",
         "data_type",
+        # "analysis.metadata.read_groups.flow_cell_barcode",
         # "cases.case_id",
         "experimental_strategy",
         "cases.samples.sample_type",
+        "cases.samples.created_datetime",
         "cases.project.program.name",
-        "md5sum"
+        "cases.samples.is_ffpe",
+        "md5sum",
         # "cases.diagnoses.tissue_or_organ_of_origin",
         # "cases.samples.tissue_type",
         ])
@@ -78,7 +81,9 @@ def retrieve_file_information(sequencing_type):
     file_expand = ",".join([
         "cases",
         "cases.project",
-        "analysis.metadata.read_groups"
+        "cases.samples",
+        "analysis.metadata.read_groups",
+        # "downstream_analyses.output_files",
         # "cases.project.program",
         # "cases.samples"
         # "cases.tissue_source_site",
@@ -91,6 +96,98 @@ def retrieve_file_information(sequencing_type):
             dict(op="=", content=dict(field="experimental_strategy", value=sequencing_type)),
             dict(op="=", content=dict(field="data_type", value="Aligned Reads")),
             dict(op="in", content=dict(field="cases.samples.sample_type", value="Primary Tumor")),
+            dict(op="=", content=dict(field="cases.project.program.name", value="TCGA"))
+            ]
+        )
+
+    file_params = dict(
+        filters=json.dumps(file_filter),
+        fields=file_fields,
+        expand=file_expand,
+        size="100000"
+        )
+
+    response = requests.post(FILES_ENDPOINT,
+                             headers={"Content-Type": "application/json"},
+                             json=file_params)
+    if not response.ok:
+        raise Exception
+
+    file_table = json.loads(response.content.decode("utf-8"))["data"]["hits"]
+    fix_metadata(file_table)
+    file_table = [walk_dict(entry) for entry in file_table]
+    mdex = MultiIndex.from_tuples(file_table[0].keys())
+    file_table = pd.DataFrame(file_table, columns=mdex)
+    file_table[("file", "experimental_strategy")] = file_table[("file", "experimental_strategy")].astype(CategoricalDtype(["WGS", "WXS"]))
+    file_table.set_index([("cases", "case_id"), ("file", "id"), ("file", "experimental_strategy")],
+                         inplace=True, drop=False)
+    file_table.index.rename(["case_id", "file_id", "sequencing"], inplace=True)
+    file_table = file_table[file_table.columns.sort_values(ascending=False)]
+    # file_table = _rename_metadata(file_table)
+    return file_table
+
+
+def fix_metadata(data, keep_sub_ids=False):
+    sub_id_cols = ["read_group_id", "read_group_name", "submitter_id"]
+    for i, entry in enumerate(data):
+        read_groups = entry["analysis"]["metadata"]["read_groups"]
+        new_entry = dict()
+        for read_group in read_groups:
+            for key, value in read_group.items():
+                if not keep_sub_ids and key in sub_id_cols:
+                    continue
+                if key not in new_entry:
+                    new_entry[key] = {value}
+                    continue
+                new_entry[key].add(value)
+        for key, value in new_entry.items():
+            if len(value) == 1:
+                new_entry[key] = list(value)[0]
+        data[i]["analysis"] = new_entry
+    return
+
+
+def _rename_metadata(data):
+    new_names = {x: x.replace("metadata.", "").replace("read_groups.", "")
+                 for x in data.analysis.columns}
+    data = data.rename(new_names, axis=1)
+    return data
+
+
+def retrieve_file_information2():
+
+    file_fields = ",".join([
+        "file_name",
+        "file_size",
+        "data_type",
+        # "cases.case_id",
+        "experimental_strategy",
+        "cases.samples.sample_type",
+        "cases.project.program.name",
+        "md5sum"
+        # "cases.diagnoses.tissue_or_organ_of_origin",
+        # "cases.samples.tissue_type",
+        ])
+
+    file_expand = ",".join([
+        "cases",
+        "cases.project",
+        # "analysis.metadata.read_groups",
+        "analysis.input_files"
+        # "cases.project.program",
+        # "cases.samples"
+        # "cases.tissue_source_site",
+        # "associated_entities"
+        ])
+
+    file_filter = dict(
+        op="and",
+        content=[
+            dict(op="=", content=dict(field="experimental_strategy", value="WXS")),
+            dict(op="=", content=dict(field="data_type", value="Annotated Somatic Mutation")),
+            dict(op="=", content=dict(field="data_format", value="vcf")),
+            dict(op="=", content=dict(field="analysis.workflow_type", value="MuTect2 Annotation")),
+            # dict(op="in", content=dict(field="cases.samples.sample_type", value="Primary Tumor")),
             dict(op="=", content=dict(field="cases.project.program.name", value="TCGA"))
             ]
         )
@@ -136,19 +233,75 @@ def filter_for_paired_sequences(table: pd.DataFrame, true_pairs: bool = False):
     return table.loc[bool_filter]
 
 
-def filter_for_samples_with_known_capture_kits(table: pd.DataFrame,
-                                               include_wgs: bool = True):
-    has_kit = table.loc[~ pd.isna(
-        table.analysis["metadata.read_groups.target_capture_kit_name"]
-        )]
+# def filter_for_samples_with_known_capture_kits(table: pd.DataFrame,
+#                                                include_wgs: bool = True):
+#     has_kit = table.loc[~ pd.isna(
+#         table.analysis["target_capture_kit_name"]
+#         )]
+#     if not include_wgs:
+#         return has_kit
+#     has_kit.index = has_kit.index.remove_unused_levels()
+#     wgs = table.loc[idx[:, :, ["WGS"]]]
+#     # wgs.index = wgs.index.remove_unused_levels()
+#     wgs = wgs.loc[[x in has_kit.index.levels[0] for x in wgs.reset_index()["case_id"]]]
+#     has_kit = pd.concat([has_kit, wgs]).sort_index()
+#     return has_kit
+
+
+def filter_by_capture_kit(table: pd.DataFrame, capture_kit: set | list | str = None,
+                          include_wgs: bool = True):
+    """Filter file table by capture kit name.
+
+    If no capture kit name is provided, only entries with a non-NA are returned. If include_wgs is True, also
+    returns any WGS entries with an included WXS entry.
+    """
+    if isinstance(capture_kit, str):
+        capture_kit = {capture_kit}
+    elif isinstance(capture_kit, list):
+        capture_kit = set(capture_kit)
+
+    if capture_kit:
+        filtered = table.loc[table.analysis["target_capture_kit_name"].isin(capture_kit)]
+    else:
+        filtered = table.loc[~ pd.isna(table.analysis["target_capture_kit_name"])]
+
     if not include_wgs:
-        return has_kit
-    has_kit.index = has_kit.index.remove_unused_levels()
+        return filtered
+
+    filtered.index = filtered.index.remove_unused_levels()
     wgs = table.loc[idx[:, :, ["WGS"]]]
-    # wgs.index = wgs.index.remove_unused_levels()
-    wgs = wgs.loc[[x in has_kit.index.levels[0] for x in wgs.reset_index()["case_id"]]]
-    has_kit = pd.concat([has_kit, wgs]).sort_index()
-    return has_kit
+    wgs = wgs.loc[[x in filtered.index.levels[0] for x in wgs.reset_index()["case_id"]]]
+    filtered = pd.concat([filtered, wgs]).sort_index()
+    return filtered
+
+
+def filter_by_capture_kit_number(table: pd.DataFrame,
+                                 capture_catalog_number: set | list | str = None,
+                                 include_wgs: bool = True):
+    """Filter file table by capture kit catalog number.
+
+    If no capture kit catalog number is provided, only entries with a non-NA are
+    returned. If include_wgs is True, also returns any WGS entries with an included
+    WXS entry.
+    """
+    if isinstance(capture_catalog_number, str):
+        capture_catalog_number = {capture_catalog_number}
+    elif isinstance(capture_catalog_number, list):
+        capture_catalog_number = set(capture_catalog_number)
+
+    if capture_catalog_number:
+        filtered = table.loc[table.analysis["target_capture_kit_catalog_number"].isin(capture_catalog_number)]
+    else:
+        filtered = table.loc[~ pd.isna(table.analysis["target_capture_kit_name"])]
+
+    if not include_wgs:
+        return filtered
+
+    filtered.index = filtered.index.remove_unused_levels()
+    wgs = table.loc[idx[:, :, ["WGS"]]]
+    wgs = wgs.loc[[x in filtered.index.levels[0] for x in wgs.reset_index()["case_id"]]]
+    filtered = pd.concat([filtered, wgs]).sort_index()
+    return filtered
 
 
 def sort_by_project_size(table):
@@ -175,7 +328,7 @@ def export_manifests(table, output_prefix, seq_type):
     cols = list(zip(["file"]*len(cols), cols))
     cols += [("cases", "case_id"),
              ("cases", "project.project_id"),
-             ("analysis", "metadata.read_groups.target_capture_kit_name")]
+             ("analysis", "target_capture_kit_name")]
     manifest = table.loc[idx[:, cols]]
     manifest.columns = [x[1].split(".")[-1] for x in manifest.columns]
     if seq_type == "paired":
