@@ -504,7 +504,7 @@ def main_simple(forward_pileup, reverse_pileup,
         table["case_id"] = sample_id
         table = table.reset_index().set_index(["case_id", "reference",
                                                "coding_strand", "orientation"])
-        table.droplevel("orientation", inplace=True)
+        table = table.droplevel("orientation")
     if export_path:
         table.to_csv(export_path, sep="\t", index=True)
     return table
