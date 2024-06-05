@@ -136,4 +136,4 @@ file_id="$(basename "${input_bam}")"
 file_id="${file_id%%.bam}"
 
 bash 05.cleanup.sh -d "${dest_dir}" -f "${file_id}"
-rm "${input_bam}"
+rm "${input_bam}" "${input_bam%.bam}".bai
