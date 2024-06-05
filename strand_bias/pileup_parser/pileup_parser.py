@@ -506,7 +506,7 @@ def main_simple(forward_pileup, reverse_pileup,
                                                "coding_strand", "orientation"])
         # table.drop("orientation", inplace=True)
     if export_path:
-        table.write_csv(export_path, sep="\t", index=True)
+        table.to_csv(export_path, sep="\t", index=True)
     return table
 
 
