@@ -477,9 +477,44 @@ def main_low_mem(file_prefix, include="all",
     return table
 
 
+def main_simple(forward_pileup, reverse_pileup,
+                single_mismatches_only=False, filter_bed=None,
+                export_path=None, sample_id=None,
+                skip_match_positions=False, skip_match_bases=False,
+                **kwargs):
+    filter_dict = read_filter_bed(filter_bed) if filter_bed else None
+    tables = []
+    for strand, file in zip(["forward", "reverse"], [forward_pileup, reverse_pileup]):
+        pileup = Pileup(pileup_file=file, region=strand,
+                        skip_match_bases=skip_match_bases,
+                        skip_match_positions=skip_match_positions)
+        if single_mismatches_only:
+            pileup.filter_single_mismatches(inplace=True)
+        if filter_dict:
+            pileup.filter_pileup_positions(filter_dict, inplace=True)
+
+        table = pileup.tabulate_pileup_counts_against_ref(include_additional_indices=True,
+                                                          multidex=True)
+        tables.append(table)
+        del pileup
+
+    table = pd.concat(tables)
+    table = table.sort_index()
+    if sample_id is not None:
+        table["case_id"] = sample_id
+        table = table.reset_index().set_index(["case_id", "reference",
+                                               "coding_strand", "orientation"])
+        table.drop("orientation", inplace=True)
+    if export_path:
+        table.write_csv(export_path, sep="\t", index=True)
+    return table
+
+
 def _setup_argparse():
     parser = argparse.ArgumentParser()
-    parser.add_argument("-f", "--file-prefix", required=True)
+    parser.add_argument("-f", "--file-prefix")
+    parser.add_argument("-pf", "--forward-pileup")
+    parser.add_argument("-pr", "--reverse-pileup")
     parser.add_argument("-b", "--filter-bed")
     parser.add_argument("-o", "--export-path")
     parser.add_argument("--summary-path")
@@ -499,7 +534,10 @@ if __name__ == '__main__':
     if len(sys.argv) == 1:
         argparser.print_help()
         sys.exit()
+
     args = argparser.parse_args()
+    if not args.file_prefix:
+        main_simple(**vars(args))
     if args.low_memory:
         main_low_mem(**vars(args))
     else:
