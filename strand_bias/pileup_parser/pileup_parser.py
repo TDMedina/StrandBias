@@ -512,6 +512,7 @@ def main_simple(forward_pileup, reverse_pileup,
 
 def _setup_argparse():
     parser = argparse.ArgumentParser()
+    parser.add_argument("-id", "--sample-id")
     parser.add_argument("-f", "--file-prefix")
     parser.add_argument("-pf", "--forward-pileup")
     parser.add_argument("-pr", "--reverse-pileup")
