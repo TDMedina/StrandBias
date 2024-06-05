@@ -539,7 +539,7 @@ if __name__ == '__main__':
     args = argparser.parse_args()
     if not args.file_prefix:
         main_simple(**vars(args))
-    if args.low_memory:
+    elif args.low_memory:
         main_low_mem(**vars(args))
     else:
         pileup_sample = main(**vars(args))
