@@ -19,6 +19,7 @@ _INCLUSION_MAP = {"all": _ORIENTATIONS,
                   "non_combined": _ORIENTATIONS - {"F1R2", "F2R1"}}
 _INCLUSION_MAP.update(dict(zip(_ORIENTATIONS, _ORIENTATIONS)))
 
+_BASES = set("ACGT")
 
 class PileupBase:
     """Object representing a single pileup character.
@@ -240,6 +241,8 @@ class Pileup:
         #     return self.pileup_counts_against_ref
         ref_counter = {"A": Counter(), "C": Counter(), "G": Counter(), "T": Counter()}
         for pileup_pos in self.pileup_positions:
+            if pileup_pos.reference not in _BASES:
+                continue  # Skip ambiguous ref bases, e.g. Y (pyrimidine) and R (purine)
             ref_counter[pileup_pos.reference] += pileup_pos.pileup_counts
         # self.pileup_counts_against_ref = ref_counter
         return ref_counter
