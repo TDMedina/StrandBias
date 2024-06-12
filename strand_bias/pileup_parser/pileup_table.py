@@ -1,4 +1,6 @@
 
+from linecache import getline
+
 from numpy import log2
 import pandas as pd
 from pandas import IndexSlice as idx
@@ -73,16 +75,25 @@ class ConcatenatedPileupTable:
         self._obj = pandas_obj
 
     @staticmethod
-    def read_csv(file_path):
-        table = pd.read_csv(file_path, sep="\t", index_col=list(range(6)), header=[0, 1])
+    def _count_index_levels(file_path):
+        count = len([x for x in getline(file_path, 3).rstrip().split("\t") if x])
+        return count
+
+    @classmethod
+    def read_csv(cls, file_path):
+        index_len = cls._count_index_levels(file_path)
+        table = pd.read_csv(file_path, sep="\t", index_col=list(range(index_len)), header=[0, 1])
         return table
 
     def simplify_for_reference_asymmetry(self, change_numerator, change_denominator,
                                          add_ratio_column=True, log_transform_ratio=False,
                                          add_fraction_column=True,
-                                         normalization_counts=None, normalization_factor=1):
+                                         normalization_counts=None, normalization_factor=1,
+                                         row_groupings=None):
+        if row_groupings is None:
+            row_groupings = ["project_id", "case_id", "file_id", "reference"]
         table = (self._obj
-                 .groupby(["project_id", "case_id", "file_id", "reference"])
+                 .groupby(row_groupings)
                  .agg(sum)
                  .groupby("alt", axis=1)
                  .agg(sum))
@@ -110,19 +121,24 @@ class ConcatenatedPileupTable:
     def simplify_for_transcription_asymmetry(self, change_numerator, change_denominator,
                                              add_ratio_column=True, log_transform_ratio=False,
                                              add_fraction_column=True,
-                                             normalization_counts=None, normalization_factor=1):
+                                             normalization_counts=None, normalization_factor=1,
+                                             row_groupings=None):
+        if row_groupings is None:
+            row_groupings = ["project_id", "case_id", "file_id", "reference", "coding_strand"]
         table = (self._obj
-                 .groupby(["project_id", "case_id", "file_id", "reference", "coding_strand"])
+                 .groupby(row_groupings)
                  .agg(sum)
                  .groupby("alt", axis=1)
                  .agg(sum))
         table = table.unstack(level=-2)[[tuple(reversed(change_numerator)),
                                          tuple(reversed(change_denominator))]]
         table.columns = [change_numerator, change_denominator]
-        numerator = (table.loc[idx[:, :, :, "forward"], change_numerator].droplevel("coding_strand")
-                     + table.loc[idx[:, :, :, "reverse"], change_denominator].droplevel("coding_strand"))
-        denominator = (table.loc[idx[:, :, :, "forward"], change_denominator].droplevel("coding_strand")
-                       + table.loc[idx[:, :, :, "reverse"], change_numerator].droplevel("coding_strand"))
+        forward_slice = tuple([slice(None)] * (len(row_groupings)-2) + ["forward"])
+        reverse_slice = tuple([slice(None)] * (len(row_groupings)-2) + ["reverse"])
+        numerator = (table.loc[forward_slice, change_numerator].droplevel("coding_strand")
+                     + table.loc[reverse_slice, change_denominator].droplevel("coding_strand"))
+        denominator = (table.loc[forward_slice, change_denominator].droplevel("coding_strand")
+                       + table.loc[reverse_slice, change_numerator].droplevel("coding_strand"))
         table = pd.DataFrame({change_numerator: numerator, change_denominator: denominator})
 
         # if normalization_counts is not None:
