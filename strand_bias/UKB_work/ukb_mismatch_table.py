@@ -6,6 +6,10 @@ import plotly.graph_objects as go
 
 from hexbin import plot_hexbin
 
+from strand_bias.TCGA_analysis.capture_kit_counts import CaptureKit
+
+xgen = CaptureKit.read_capture_kit_nucleotide_summary("/home/tyler/Documents/Resource_Data/capture_kits/IDT_xGen_Exome_Hyb_Panel/nt_counts.tsv")
+
 
 def filter_by_ancestry(data_table, ancestry_file):
     ancestry = pd.read_csv(ancestry_file, sep="\t", index_col=[0, 1])
@@ -27,38 +31,46 @@ class UkbMismatchTable:
         asym = pd.read_csv(file_path, sep="\t", index_col=[0, 1], header=[0, 1])
         return asym
 
-    def reference_bias_counts(self, add_ratio=True, add_fraction=True):
+    def reference_bias_counts(self, add_ratio=True, add_fraction=False, normalization_data=None):
         ref_bias = self._obj.groupby("mutation", axis=1).agg(sum)
+        if normalization_data is not None:
+            norm_counts = normalization_data.capkit.calculate_reference_counts()
+            ref_bias["GT"] = ref_bias.GT * norm_counts.G / norm_counts.sum()
+            ref_bias["CA"] = ref_bias.CA * norm_counts.C / norm_counts.sum()
         if add_ratio:
             ref_bias["ratio"] = ref_bias.GT / ref_bias.CA
         if add_fraction:
             ref_bias["fraction"] = ref_bias.GT / ref_bias.sum(axis=1)
         return ref_bias
 
-    def transcription_bias_counts(self, add_ratio=True, add_fraction=True):
+    def transcription_bias_counts(self, add_ratio=True, add_fraction=False, normalization_data=None):
         gt = self._obj.forward.GT + self._obj.reverse.CA
         gt.name = "GT"
         ca = self._obj.forward.CA + self._obj.reverse.GT
         ca.name = "CA"
         trans_bias = pd.concat([gt, ca], axis=1)
+        if normalization_data is not None:
+            norm_counts = normalization_data.capkit.calculate_transcription_counts()
+            trans_bias["GT"] = trans_bias.GT / (norm_counts.G / norm_counts.sum())
+            trans_bias["CA"] = trans_bias.CA / (norm_counts.C / norm_counts.sum())
         if add_ratio:
             trans_bias["ratio"] = trans_bias.GT / trans_bias.CA
         if add_fraction:
             trans_bias["fraction"] = trans_bias.GT / trans_bias.sum(axis=1)
         return trans_bias
 
-    def calculate_bias(self, bias_type, add_ratio=True, add_fraction=True):
+    def calculate_bias(self, bias_type, add_ratio=True, add_fraction=True, normalization_data=None):
         if bias_type == "transcription":
-            bias_data = self._obj.ukb_mismatches.transcription_bias_counts(add_ratio, add_fraction)
+            bias_data = self._obj.ukb_mismatches.transcription_bias_counts(add_ratio, add_fraction, normalization_data)
         elif bias_type == "reference":
-            bias_data = self._obj.ukb_mismatches.reference_bias_counts(add_ratio, add_fraction)
+            bias_data = self._obj.ukb_mismatches.reference_bias_counts(add_ratio, add_fraction, normalization_data)
         else:
             raise ValueError(f"Invalid bias_type '{bias_type}'. bias_type "
                              f"must be one of 'transcription' or 'reference'.")
         return bias_data
 
-    def sort_by_batch_ratio_median(self, bias_type):
-        bias_data = self._obj.ukb_mismatches.calculate_bias(bias_type, True, False)
+    def sort_by_batch_ratio_median(self, bias_type, normalization_data=None):
+        bias_data = self._obj.ukb_mismatches.calculate_bias(bias_type, True, False, normalization_data)
         medians = {batch: bias_data.loc[batch].ratio.median()
                    for batch in bias_data.index.unique("project_id")}
         bias_data.sort_values(by="ratio", inplace=True)
@@ -68,6 +80,8 @@ class UkbMismatchTable:
 
     def sort_by_case_ratio(self, bias_type):
         bias_data = self._obj.ukb_mismatches.calculate_bias(bias_type, True, False)
+    def sort_by_case_ratio(self, bias_type, normalization_data=None):
+        bias_data = self._obj.ukb_mismatches.calculate_bias(bias_type, True, False, normalization_data)
         bias_data.sort_values(by="ratio", inplace=True)
         return bias_data
 
@@ -79,10 +93,10 @@ class UkbMismatchTable:
         titles = dict(title=title, xaxis_title=xaxis_title, yaxis_title=yaxis_title)
         return titles
 
-    def _plot_bias_scatter(self, bias_type, inverse=False, **kwargs):
+    def _plot_bias_scatter(self, bias_type, normalization_data=None, inverse=False, **kwargs):
         """Bias type must be one of 'transcription' or 'reference'."""
         plot = go.Figure()
-        bias_data = self._obj.ukb_mismatches.calculate_bias(bias_type, False, False)
+        bias_data = self._obj.ukb_mismatches.calculate_bias(bias_type, False, False, normalization_data)
         xcol, ycol = ("CA", "GT") if not inverse else ("GT", "CA")
         for batch in bias_data.index.unique("project_id"):
             batch_subset = bias_data.loc[batch]
@@ -95,12 +109,12 @@ class UkbMismatchTable:
         plot.update_layout(**titles)
         return plot
 
-    def _plot_bias_box(self, bias_type, sort_plot=True, inverse=False, **kwargs):
+    def _plot_bias_box(self, bias_type, sort_plot=True, normalization_data=None, inverse=False, **kwargs):
         plot = go.Figure()
         if sort_plot:
-            bias_data = self._obj.ukb_mismatches.sort_by_batch_ratio_median(bias_type)
+            bias_data = self._obj.ukb_mismatches.sort_by_batch_ratio_median(bias_type, normalization_data=normalization_data)
         else:
-            bias_data = self._obj.ukb_mismatches.calculate_bias(bias_type, True, False)
+            bias_data = self._obj.ukb_mismatches.calculate_bias(bias_type, True, False, normalization_data)
         yaxis_title = "G>T / C>A"
         if inverse:
             yaxis_title = "C>A / G>T"
@@ -130,8 +144,8 @@ class UkbMismatchTable:
         plot.update_xaxes(tickfont=dict(color="rgba(0,0,0,0)", size=1))
         return plot
 
-    def _plot_bias_hexbin(self, bias_type, inverse=False, **kwargs):
-        data = self._obj.ukb_mismatches.calculate_bias(bias_type)
+    def _plot_bias_hexbin(self, bias_type, inverse=False, normalization_data=None, **kwargs):
+        data = self._obj.ukb_mismatches.calculate_bias(bias_type, normalization_data=normalization_data)
         xcol, ycol = ("CA", "GT") if not inverse else ("GT", "CA")
         fig = plot_hexbin(data[xcol], data[ycol])
         titles = self._make_scatter_titles(xcol, ycol, bias_type)
@@ -139,20 +153,24 @@ class UkbMismatchTable:
         fig.update_layout(**titles)
         return fig
 
-    def plot_reference_bias_scatter(self):
-        return self._plot_bias_scatter("reference")
+    def plot_reference_bias_scatter(self, normalization_data=None):
+        return self._plot_bias_scatter("reference", normalization_data=normalization_data)
 
-    def plot_transcription_bias_scatter(self):
-        return self._plot_bias_scatter("transcription")
+    def plot_transcription_bias_scatter(self,normalization_data=None):
+        return self._plot_bias_scatter("transcription", normalization_data=normalization_data)
 
-    def plot_reference_bias_box(self, inverse=False):
-        return self._plot_bias_box("reference", inverse=inverse)
+    def plot_reference_bias_box(self, inverse=False, normalization_data=None):
+        return self._plot_bias_box("reference", inverse=inverse, normalization_data=normalization_data)
 
-    def plot_transcription_bias_box(self, inverse=False):
-        return self._plot_bias_box("transcription", inverse=inverse)
+    def plot_transcription_bias_box(self, inverse=False, normalization_data=None):
+        return self._plot_bias_box("transcription", inverse=inverse, normalization_data=normalization_data)
 
-    def calculate_aggregate_bias(self, bias_type):
+    def calculate_aggregate_bias(self, bias_type, normalization_data=None):
         table = self.calculate_bias(bias_type, False, False)
         table = table.sum()
+        if normalization_data is not None:
+            norm_counts = normalization_data.capkit.calculate_counts(bias_type)
+            table["GT"] = table.GT / (norm_counts.G / norm_counts.sum())
+            table["CA"] = table.CA / (norm_counts.C / norm_counts.sum())
         table["ratio"] = table.GT / table.CA
         return table
