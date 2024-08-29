@@ -78,8 +78,6 @@ class UkbMismatchTable:
                              inplace=True)
         return bias_data
 
-    def sort_by_case_ratio(self, bias_type):
-        bias_data = self._obj.ukb_mismatches.calculate_bias(bias_type, True, False)
     def sort_by_case_ratio(self, bias_type, normalization_data=None):
         bias_data = self._obj.ukb_mismatches.calculate_bias(bias_type, True, False, normalization_data)
         bias_data.sort_values(by="ratio", inplace=True)
