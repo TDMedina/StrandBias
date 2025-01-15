@@ -9,6 +9,7 @@ from pysam import VariantFile, VariantRecord
 
 from gtf_parser import read_gtf_file
 
+_MYGENESERVICE = mygene.MyGeneInfo()
 
 def _overlap(range1, range2):
     if range1.start <= range2.stop-1 and range2.start <= range1.stop-1:
@@ -91,11 +92,6 @@ def tally_variant_information(vcf_path, sample_info, coding_region):
         if counter["PASS"] == 0:
             counter["FAIL"] = 1
     return counts
-
-
-def read_vcf_as_array(vcf_path):
-    with open(vcf_path) as infile:
-
 
 
 def fetch_gene_symbol(contig, position):
