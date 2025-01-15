@@ -84,8 +84,9 @@ def adjust_batches_in_asymmetry_data(data):
     return data
 
 
-def read_all_asymmetry_data(asym_file, singleton_file, geno_counts, nuc_file,
-                            ancestry_file):
+def read_all_asymmetry_data(asym_file, singleton_file, geno_counts,
+                            # nuc_file,
+                            ancestry_file, normalized=True):
     asym = read_asymmetry_data(asym_file)
 
     scounts = read_mapped_singleton_counts(singleton_file)
@@ -96,10 +97,10 @@ def read_all_asymmetry_data(asym_file, singleton_file, geno_counts, nuc_file,
     data = pd.merge(data, asym, left_index=True, right_index=True)
     data = pd.merge(data, geno_counts, left_index=True, right_index=True)
 
-    nuc_counts = read_reference_nuc_file(nuc_file)
+    # nuc_counts = read_reference_nuc_file(nuc_file)
 
-    data = normalize_mismatch_counts(data, nuc_counts)
-    data = calculate_asym_ratios(data)
+    # data = normalize_mismatch_counts(data, nuc_counts)
+    data = calculate_asym_ratios(data, normalized=normalized)
     data = adjust_batches_in_asymmetry_data(data)
 
     return data
@@ -125,14 +126,15 @@ def read_vcounts(vcounts_file, master_file=True):
 
 
 def read_default_asym_data():
-    wd = "~/Documents/Projects/StrandBias/"
+    wd = "~/Documents/Projects/StrandBias/UKB_analysis/"
     data = read_all_asymmetry_data(
         # asym_file=wd+"asymmetry.declan.na_filtered.tsv",
         asym_file=wd+"asymmetry.declan.na_filtered.renamed.tsv",
         singleton_file=wd+"singleton_counts.mapped.tsv",
         geno_counts=wd+"genotype_counts.mapped.tsv",
-        nuc_file=wd+"capture_kit_info/xgen-exome-hyb-panel-v2/stranded/xgen.merged.nuc_file",
-        ancestry_file=wd+"ancestry.mapped.tsv"
+        # nuc_file=wd+"IDT_xGen_Exome_Hyb_Panel/xgen-exome-hyb-panel-v2/stranded/xgen.merged.nuc_file",
+        ancestry_file=wd+"ancestry.mapped.tsv",
+        normalized=False
         )
     return data
 
