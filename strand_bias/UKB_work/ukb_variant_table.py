@@ -6,6 +6,7 @@ import plotly.graph_objects as go
 import plotly.io as pio
 
 from hexbin import plot_hexbin
+from strand_bias.TCGA_analysis.capture_kit_counts import CaptureKit
 
 pio.renderers.default = "browser"
 
@@ -68,38 +69,45 @@ class UkbVariantsUnstacked:
     #     table = table.ukb_variants.unstack()
     #     return table
 
-    def calculate_ref_bias(self, drop_counts=True, normalization_data=None):
+    def calculate_ref_bias(self, drop_counts=True,
+                           normalization_data=None,
+                           normalization_factor=1,
+                           ratio_by_template=None):
         if not self._has_mut_header:
             return
+        table = self._obj.groupby(["stat", "mutation"], axis=1).agg(sum)
         if normalization_data is not None:
             normalization_data = normalization_data.capkit.calculate_reference_counts()
-            normalization_data = normalization_data / normalization_data.sum()
-        table = self._obj.groupby(["stat", "mutation"], axis=1).agg(sum)
         for stat in table.columns.levels[0]:
             if normalization_data is not None:
-                table[(stat, "GT")] = table[(stat, "GT")] / normalization_data.G
-                table[(stat, "CA")] = table[(stat, "CA")] / normalization_data.C
+                table[(stat, "GT")] = (table[(stat, "GT")] / normalization_data.G) * normalization_factor
+                table[(stat, "CA")] = (table[(stat, "CA")] / normalization_data.C) * normalization_factor
             table[(stat, "ratio")] = table[stat].GT / table[stat].CA
         if drop_counts:
             table = table.loc[:, idx[:, "ratio"]]
         return table
 
-    def calculate_transcription_bias(self, drop_counts=True, normalization_data=None):
+    def calculate_transcription_bias(self, drop_counts=True,
+                                     normalization_data=None,
+                                     normalization_factor=1,
+                                     ratio_by_template=True):
         if not self._has_mut_header:
             return
         table = self._obj.copy()
         if normalization_data is not None:
             normalization_data = normalization_data.capkit.calculate_transcription_counts()
-            normalization_data = normalization_data / normalization_data.sum()
         for stat in table.columns.levels[0]:
             stat_table = table[stat]
             table[(stat, "GT", "combined")] = stat_table.GT.forward + stat_table.CA.reverse
             table[(stat, "CA", "combined")] = stat_table.CA.forward + stat_table.GT.reverse
             if normalization_data is not None:
                 table[(stat, "GT", "combined")] = (table[(stat, "GT", "combined")]
-                                                   / normalization_data.G)
+                                                   / normalization_data.G) * normalization_factor
                 table[(stat, "CA", "combined")] = (table[(stat, "CA", "combined")]
-                                                   / normalization_data.C)
+                                                   / normalization_data.C) * normalization_factor
+            if ratio_by_template:
+                table[(stat, "GT", "combined")], table[(stat, "CA", "combined")] = (table[(stat, "CA", "combined")],
+                                                                                    table[(stat, "GT", "combined")])
             table[(stat, "ratio", "combined")] = (table[(stat, "GT", "combined")]
                                                   / table[(stat, "CA", "combined")])
 
@@ -110,26 +118,48 @@ class UkbVariantsUnstacked:
         table = table.droplevel("transcribed", axis=1)
         return table
 
-    def calculate_bias(self, bias_type, drop_counts=True, normalization_data=None):
+    def calculate_bias(self, bias_type, drop_counts=True, normalization_data=None,
+                       normalization_factor=1, ratio_by_template=True):
         if bias_type == "transcription":
-            return self.calculate_transcription_bias(drop_counts, normalization_data=normalization_data)
+            return self.calculate_transcription_bias(
+                drop_counts=drop_counts,
+                normalization_data=normalization_data,
+                normalization_factor=normalization_factor,
+                ratio_by_template=ratio_by_template
+                )
         elif bias_type == "reference":
-            return self.calculate_ref_bias(drop_counts, normalization_data=normalization_data)
+            return self.calculate_ref_bias(
+                drop_counts=drop_counts,
+                normalization_data=normalization_data,
+                normalization_factor=normalization_factor)
         else:
             raise ValueError(f"'bias_type' must be 'transcription' or 'reference'.")
 
-    def plot_ref_bias_histogram(self, normalization_data=None):
-        ref_bias = self.calculate_ref_bias(normalization_data=normalization_data)
+    def plot_ref_bias_histogram(self, normalization_data=None, normalization_factor=1):
+        ref_bias = self.calculate_ref_bias(normalization_data=normalization_data,
+                                           normalization_factor=normalization_factor)
         fig = go.Figure(go.Histogram(x=ref_bias.Hets.ratio))
         return fig
 
-    def plot_transcription_bias_histogram(self, normalization_data=None):
-        transcription_bias = self.calculate_transcription_bias(normalization_data=normalization_data)
+    def plot_transcription_bias_histogram(self, normalization_data=None, normalization_factor=1,
+                                          ratio_by_template=True):
+        transcription_bias = self.calculate_transcription_bias(
+            normalization_data=normalization_data,
+            normalization_factor=normalization_factor,
+            ratio_by_template=ratio_by_template
+            )
         fig = go.Figure(go.Histogram(x=transcription_bias.Hets.ratio))
         return fig
 
-    def sort_by_batch_ratio_median(self, bias_type, drop_counts=True, normalization_data=None):
-        bias_data = self._obj.ukb_variants.calculate_bias(bias_type, drop_counts, normalization_data=normalization_data)
+    def sort_by_batch_ratio_median(self, bias_type, drop_counts=True, normalization_data=None,
+                                   normalization_factor=1, ratio_by_template=True):
+        bias_data = self._obj.ukb_variants.calculate_bias(
+            bias_type=bias_type,
+            drop_counts=drop_counts,
+            normalization_data=normalization_data,
+            normalization_factor=normalization_factor,
+            ratio_by_template=ratio_by_template
+            )
         medians = {batch: bias_data.loc[batch].Hets.ratio.median()
                    for batch in bias_data.index.unique("project_id")}
         bias_data.sort_values(by=("Hets", "ratio"), inplace=True)
@@ -138,14 +168,24 @@ class UkbVariantsUnstacked:
         return bias_data
 
     def _plot_bias_box(self, bias_type, sort_plot=True, inverse=False, filtered=False,
-                       normalization_data=None, **kwargs):
+                       normalization_data=None, normalization_factor=1, ratio_by_template=True, **kwargs):
         plot = go.Figure()
         if sort_plot:
-            bias_data = self._obj.ukb_variants.sort_by_batch_ratio_median(bias_type, True,
-                                                                          normalization_data=normalization_data)
+            bias_data = self._obj.ukb_variants.sort_by_batch_ratio_median(
+                bias_type=bias_type,
+                drop_counts=True,
+                normalization_data=normalization_data,
+                normalization_factor=normalization_factor,
+                ratio_by_template=ratio_by_template
+                )
         else:
-            bias_data = self._obj.ukb_variants.calculate_bias(bias_type, True,
-                                                              normalization_data=normalization_data)
+            bias_data = self._obj.ukb_variants.calculate_bias(
+                bias_type=bias_type,
+                drop_counts=True,
+                normalization_data=normalization_data,
+                normalization_factor=normalization_factor,
+                ratio_by_template=ratio_by_template)
+
         if inverse:
             bias_data = 1/bias_data
         title = f"{bias_type.title()} strand 8-oxo-G heterozygous variant bias by flowcell"
@@ -191,9 +231,15 @@ class UkbVariantsUnstacked:
         return titles
 
     def _plot_bias_scatter(self, bias_type, inverse=False, filtered=False,
-                           normalization_data=None, **kwargs):
+                           normalization_data=None, normalization_factor=1, ratio_by_template=True, **kwargs):
         fig = go.Figure()
-        data = self.calculate_bias(bias_type, False, normalization_data=normalization_data)
+        data = self.calculate_bias(
+            bias_type=bias_type,
+            drop_counts=False,
+            normalization_data=normalization_data,
+            normalization_factor=normalization_factor,
+            ratio_by_template=ratio_by_template
+            )
         xcol, ycol = ("CA", "GT") if not inverse else ("GT", "CA")
         for proj in self._obj.index.unique("project_id"):
             fig.add_trace(go.Scatter(x=data.loc[idx[proj], idx["Hets", xcol]],
@@ -206,25 +252,69 @@ class UkbVariantsUnstacked:
         return fig
 
     def _plot_bias_hexbin(self, bias_type, inverse=False, filtered=False,
-                          normalization_data=None, **kwargs):
-        data = self.calculate_bias(bias_type, False, normalization_data=normalization_data)
+                          normalization_data=None, normalization_factor=1,
+                          ratio_by_template=True, showlegend=True,
+                          return_graph_objects=False, **kwargs):
+        data = self.calculate_bias(
+            bias_type=bias_type,
+            drop_counts=False,
+            normalization_data=normalization_data,
+            normalization_factor=normalization_factor,
+            ratio_by_template=ratio_by_template
+            )
         xcol, ycol = ("CA", "GT") if not inverse else ("GT", "CA")
-        fig = plot_hexbin(data.Hets[xcol], data.Hets[ycol])
+        fig = plot_hexbin(data.Hets[xcol], data.Hets[ycol],
+                          showlegend=showlegend,
+                          return_graph_objects=return_graph_objects)
+        if return_graph_objects:
+            gos = fig
+        maximum = data.loc[:, idx["Hets", ["GT", "CA"]]].max().max()
+        minimum = data.loc[:, idx["Hets", ["GT", "CA"]]].min().min()
+        yx_line = go.Scatter(x=[minimum, maximum], y=[minimum, maximum], mode="lines",
+                             line=dict(color="lightgray", dash="dash"), name="y = x",
+                             showlegend=False)
+        if return_graph_objects:
+            gos.append(yx_line)
+            return gos
+        fig.add_trace(yx_line)
         titles = self._make_scatter_titles(xcol, ycol, bias_type, filtered)
         titles["title"] += ", hexbinned"
         fig.update_layout(**titles)
         return fig
 
-    def plot_transcription_bias_scatter(self, normalization_data=None):
-        return self._plot_bias_scatter("transcription", normalization_data=normalization_data)
+    def plot_transcription_bias_scatter(self, normalization_data=None, normalization_factor=1, ratio_by_template=True):
+        return self._plot_bias_scatter(
+            bias_type="transcription",
+            normalization_data=normalization_data,
+            normalization_factor=normalization_factor,
+            ratio_by_template=ratio_by_template
+            )
 
-    def plot_reference_bias_scatter(self, normalization_data=None):
-        return self._plot_bias_scatter("reference", normalization_data=normalization_data)
+    def plot_reference_bias_scatter(self, normalization_data=None, normalization_factor=1):
+        return self._plot_bias_scatter(
+            bias_type="reference",
+            normalization_data=normalization_data,
+            normalization_factor=normalization_factor
+            )
 
-    def calculate_aggregate_bias(self, bias_type, normalization_data=None):
-        table = self.calculate_bias(bias_type, False, normalization_data=normalization_data)
+    def calculate_aggregate_bias(self, bias_type, normalization_data=None,
+                                 normalization_factor=1, ratio_by_template=True):
+        table = self.calculate_bias(
+            bias_type=bias_type,
+            drop_counts=False,
+            normalization_data=normalization_data,
+            normalization_factor=normalization_factor
+            )
         table = table.loc[:, idx[:, ["GT", "CA"]]].sum()
         for stat in table.index.unique("stat"):
-            table[stat, "ratio"] = table[stat, "GT"] / table[stat, "CA"]
+            if ratio_by_template:
+                table[stat, "ratio"] = table[stat, "CA"] / table[stat, "GT"]
+            else:
+                table[stat, "ratio"] = table[stat, "GT"] / table[stat, "CA"]
         table = table.sort_index()
         return table
+
+if __name__ == '__main__':
+    xgen = CaptureKit.read_capture_kit_nucleotide_summary(
+        "/home/tyler/Documents/Resource_Data/capture_kits/IDT_xGen_Exome_Hyb_Panel/nt_counts.tsv")
+    variants = UkbVariantsUnstacked.read_csv("~/StrandBias/UKB_analysis/variant_reanalysis/oxog_vars.snp_filtered.stats.project_ids.tsv")

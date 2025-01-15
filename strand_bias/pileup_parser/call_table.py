@@ -1,12 +1,14 @@
 
 from itertools import product
 
-from numpy import log2
+from numpy import log2, median
 import pandas as pd
 from pandas.api.extensions import register_dataframe_accessor
 from pandas import IndexSlice as idx
 import plotly.graph_objects as go
 import plotly.io as pio
+
+from strand_bias.TCGA_analysis.utilities import _CHANGES, _COMPS, make_complement
 
 pio.renderers.default = "browser"
 
@@ -183,19 +185,72 @@ class CallTallyTable:
         table = pd.read_csv(file_path, sep="\t", index_col=list(range(8)))
         return table
 
-    def simplify_for_reference_asymmetry(self, change_numerator, change_denominator,
-                                         add_ratio_column=True, log_transform_ratio=False,
-                                         add_fraction_column=True,
-                                         normalization_counts=None, normalization_factor=1):
+    def count_unique_calls(self, bias_type, changes=None, filters=None):
+        if changes is None:
+            changes = _CHANGES
+        if filters is None:
+            filters = ["TOTAL", "PASS", "FAIL"]
+        if bias_type == "reference":
+            table = (self._obj[filters]
+                     .groupby(["project_id", "contig", "pos", "ref", "alt"])
+                     .sum() > 0)
+            table = table.astype(int).groupby(["project_id", "ref", "alt"]).sum()
+            table = table.unstack([-2, -1])
+            table.columns = pd.MultiIndex.from_tuples([(x[0], "count", x[1] + x[2])
+                                                       for x in table.columns])
+        elif bias_type == "transcription":
+            table = (self._obj[filters]
+                     .groupby(["project_id", "gene_orientation", "contig", "pos", "ref", "alt"])
+                     .sum() > 0)
+            table = table.astype(int).groupby(["project_id", "gene_orientation", "ref", "alt"]).sum()
+            table = table.unstack([-3, -2, -1])
+            table.columns = pd.MultiIndex.from_tuples([(x[0], x[1], "count", x[2] + x[3])
+                                                       for x in table.columns])
+            for change in _CHANGES + _COMPS:
+                for _filter in filters:
+                    table[(_filter, "combo", "count", change)] = (
+                            table[(_filter, "forward", "count", change)]
+                            + table[(_filter, "reverse", "count", make_complement(change))]
+                            )
+            table = table.loc[:, idx[:, "combo", :, :]].droplevel(level=1, axis=1)
+        else:
+            raise ValueError("'bias_type' must be one of 'transcription' or 'reference', "
+                             f"not '{bias_type}'.")
+        for change, comp in zip(_CHANGES, _COMPS):
+            for _filter in filters:
+                table[(_filter, "ratio", change + comp)] = (table[(_filter, "count", change)]
+                                                            / table[(_filter, "count", comp)])
+        table = table[sorted(table.columns)]
+        return table
+
+    def calculate_asymmetry(self, bias_type, change_numerator, change_denominator,
+                            add_ratio_column=True, log_transform_ratio=False,
+                            add_fraction_column=False,
+                            normalization_counts=None, normalization_factor=1):
+        params = locals().copy()
+        del params["bias_type"], params["self"]
+        if bias_type == "transcription":
+            return self.calculate_transcription_asymmetry(**params)
+        elif bias_type == "reference":
+            return self.calculate_reference_asymmetry(**params)
+        else:
+            raise ValueError("'bias_type' must be one of 'transcription' or 'reference', "
+                             f"not '{bias_type}'.")
+
+    def calculate_reference_asymmetry(self, change_numerator, change_denominator,
+                                      add_ratio_column=True, log_transform_ratio=False,
+                                      add_fraction_column=False,
+                                      normalization_counts=None, normalization_factor=1):
         table = self._obj.groupby(["project_id", "case_id", "file_id",
-                                   "ref", "alt"]).agg(sum)
-        table = table[["PASS", "FAIL"]]
+                                   "ref", "alt"]).sum()
+        table = table[["TOTAL", "PASS", "FAIL"]]
         table = table.unstack(level=[-2, -1])
-        keepers = [(x,) + y for x in ["PASS", "FAIL"]
+        keepers = [(x,) + y for x in ["TOTAL", "PASS", "FAIL"]
                    for y in [tuple(change_numerator), tuple(change_denominator)]]
         table = table[keepers]
-        table.columns = pd.MultiIndex.from_tuples([(x, y) for x in ["PASS", "FAIL"]
-                                                   for y in [change_numerator, change_denominator]])
+        new_cols = [(x, y) for x in ["TOTAL", "PASS", "FAIL"]
+                    for y in [change_numerator, change_denominator]]
+        table.columns = pd.MultiIndex.from_tuples(new_cols)
 
         if normalization_counts is not None:
             for col in table.columns:
@@ -203,7 +258,7 @@ class CallTallyTable:
 
         if add_ratio_column:
             ratio_label = f"{change_numerator}{change_denominator}_ratio".lower()
-            for filter_status in ["PASS", "FAIL"]:
+            for filter_status in ["TOTAL", "PASS", "FAIL"]:
                 denom = table[(filter_status, change_denominator)]
                 ratios = table[(filter_status, change_numerator)] / denom
                 if log_transform_ratio:
@@ -211,10 +266,90 @@ class CallTallyTable:
                 table[(filter_status, ratio_label)] = ratios
         if add_fraction_column:
             ratio_label = f"{change_numerator}{change_denominator}_fraction".lower()
-            for filter_status in ["PASS", "FAIL"]:
+            for filter_status in ["TOTAL", "PASS", "FAIL"]:
                 denom = (table[(filter_status, change_numerator)]
                          + table[(filter_status, change_denominator)])
                 ratios = table[(filter_status, change_numerator)] / denom
                 table[(filter_status, ratio_label)] = ratios
         table = table[sorted(table.columns)]
         return table
+
+    def calculate_transcription_asymmetry(self, change_numerator, change_denominator,
+                                          add_ratio_column=True, log_transform_ratio=False,
+                                          add_fraction_column=False,
+                                          normalization_counts=None, normalization_factor=1):
+        table = self._obj.groupby(["project_id", "case_id", "file_id",
+                                   "gene_orientation", "ref", "alt"]).sum()
+        table = table[["TOTAL", "PASS", "FAIL"]]
+        table = table.unstack(level=[-2, -1])
+        keepers = [(x,) + y for x in ["TOTAL", "PASS", "FAIL"]
+                   for y in [tuple(change_numerator), tuple(change_denominator)]]
+        table = table[keepers]
+        new_cols = [(x, y) for x in ["TOTAL", "PASS", "FAIL"]
+                    for y in [change_numerator, change_denominator]]
+        table.columns = pd.MultiIndex.from_tuples(new_cols)
+
+        new_table = pd.DataFrame()
+        for filt, mut in new_cols:
+            new_table[(filt, mut)] = (#
+                    table.loc[idx[:, :, :, "forward"], (filt, mut)].droplevel("gene_orientation")
+                    + table.loc[idx[:, :, :, "reverse"], (filt, make_complement(mut))].droplevel("gene_orientation"))
+        table = new_table
+        table.columns = pd.MultiIndex.from_tuples(table.columns)
+
+        if normalization_counts is not None:
+            for col in table.columns:
+                table[col] = table[col] / normalization_counts[col[1][0]] * normalization_factor
+
+        if add_ratio_column:
+            ratio_label = f"{change_numerator}{change_denominator}_ratio".lower()
+            for filter_status in ["TOTAL", "PASS", "FAIL"]:
+                denom = table[(filter_status, change_denominator)]
+                ratios = table[(filter_status, change_numerator)] / denom
+                if log_transform_ratio:
+                    ratios = log2(ratios)
+                table[(filter_status, ratio_label)] = ratios
+        if add_fraction_column:
+            ratio_label = f"{change_numerator}{change_denominator}_fraction".lower()
+            for filter_status in ["TOTAL", "PASS", "FAIL"]:
+                denom = (table[(filter_status, change_numerator)]
+                         + table[(filter_status, change_denominator)])
+                ratios = table[(filter_status, change_numerator)] / denom
+                table[(filter_status, ratio_label)] = ratios
+        table = table[sorted(table.columns)]
+        return table
+
+    def calculate_all_asymmetries(self, bias_type,
+                                  add_ratio_column=True,
+                                  log_transform_ratio=False,
+                                  add_fraction_column=False,
+                                  normalization_counts=None,
+                                  normalization_factor=1):
+        params = locals().copy()
+        del params["self"]
+        table = pd.DataFrame()
+        for change, comp in zip(["TC", "CT", "TA", "TG", "CG", "GT"],
+                                ['AG', 'GA', 'AT', 'AC', 'GC', 'CA']):
+            data = self.calculate_asymmetry(change_numerator=change, change_denominator=comp,
+                                            **params)
+            name = f"{change}{comp}".lower()
+            cols = [(x[0], name, x[1].split("_")[-1]) for x in list(data.columns)]
+
+            data.columns = pd.MultiIndex.from_tuples(cols)
+            table = pd.concat([table, data], axis=1)
+        table = table[sorted(table.columns)]
+        return table
+
+    def calculate_all_median_asymmetries(self, bias_type,
+                                         add_ratio_column=True,
+                                         log_transform_ratio=False,
+                                         add_fraction_column=False,
+                                         normalization_counts=None,
+                                         normalization_factor=1):
+        params = locals().copy()
+        del params["self"]
+        table = self.calculate_all_asymmetries(**params).loc[:, idx[:, :, "ratio"]]
+        table = table.groupby("project_id").median()
+        return table
+
+

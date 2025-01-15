@@ -19,15 +19,15 @@ from aggregate import VARIANTS
 # Read asym data.
 print("Reading data...")
 asym_data = read_default_asym_data()
-nuc_counts = read_reference_nuc_file("./StrandBias/capture_kit_info/"
-                                     "xgen-exome-hyb-panel-v2/stranded/xgen.merged.nuc_file")
+# nuc_counts = read_reference_nuc_file("./StrandBias/capture_kit_info/"
+#                                      "xgen-exome-hyb-panel-v2/stranded/xgen.merged.nuc_file")
 # Read genotype counts.
 vcounts = read_vcounts("./StrandBias/genotype_counts/vcount_master.tsv",
                        master_file=True)
 
 # Subset samples to only Brits and only those in the asym data file.
 print("Organizing data...")
-asym_data = asym_data.loc[(asym_data.British == True) & (asym_data.ancestry_codes == "1001")]
+asym_data = asym_data.loc[(asym_data.British is True) & (asym_data.ancestry_codes == "1001")]
 vcounts = vcounts.loc[idx[list(asym_data.index), :, :]]
 
 # Pull out variant counts, listed as variant with respect to strand, i.e. forward coding
@@ -40,7 +40,7 @@ vcounts_oriented = (vcounts.loc[idx[:, "forward", "reference", :]]
 
 # Calculate asymmetry of genotype calls.
 # Ratio of G nucleotides in forward vs. reverse coding regions:
-g_ratio = nuc_counts.G_count[0] / nuc_counts.G_count[1]
+# g_ratio = nuc_counts.G_count[0] / nuc_counts.G_count[1]
 # Non-captured-region variant counts:
 vcounts_rev_oriented = (vcounts.loc[idx[:, "forward", "complement", :]]
                         + vcounts.loc[idx[:, "reverse", "reference", :]])
@@ -48,7 +48,7 @@ vcounts_rev_oriented = (vcounts.loc[idx[:, "forward", "complement", :]]
 vcount_ratios = vcounts_oriented / vcounts_rev_oriented
 # Ratio normalized by the number of Gs in each region:
 # FIX: THIS IS WRONG. FIX ME.
-vcount_ratios_g_normalized = vcount_ratios.loc[idx[:, "GtoT"], ] / g_ratio
+# vcount_ratios_g_normalized = vcount_ratios.loc[idx[:, "GtoT"], ] / g_ratio
 
 
 # %% Colinearity tests: Asymmetry vs. genotypes and singletons.

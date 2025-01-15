@@ -155,6 +155,9 @@ def _lookup_gene_position(contig, position, gene_table):
     return symbols
 
 
+_FORMAT_FIELDS = ["ALT_F1R2", "ALT_F2R1", "REF_F1R2", "REF_F2R1", "FOXOG"]
+
+
 def read_all_allele_frequencies(sample_table: pd.DataFrame):
     all_freqs = dict()
     total = sample_table.shape[0]
@@ -170,7 +173,7 @@ def read_all_allele_frequencies(sample_table: pd.DataFrame):
     all_freqs.index.names = ["project_id", "case_id", "file_id",
                              "contig", "pos",
                              "gene_orientation", "ref", "alt"]
-    all_freqs.columns = ["frequency", "ref_depth", "alt_depth"]
+    all_freqs.columns = ["frequency", "ref_depth", "alt_depth", "PASS"] + _FORMAT_FIELDS
     return all_freqs
 
 
@@ -179,7 +182,9 @@ def read_allele_frequency(vcf_path, sample_info, coding_region):
     freqs = {(sample_info.project_id, sample_info.case_id, sample_info.file_id,
               record.contig, record.pos, coding_region,
               record.ref, record.alts[0]):
-             [(geno := record.samples[0])["AF"], geno["AD"][0], geno["AD"][1]]
+             [(geno := record.samples[0])["AF"], geno["AD"][0], geno["AD"][1],
+              tuple(record.filter) == ("PASS",)]
+             + [geno[field] if field in geno else None for field in _FORMAT_FIELDS]
              for record in vcf.fetch() if _is_simple_snv(record)}
     return freqs
 

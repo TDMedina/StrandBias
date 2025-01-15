@@ -1,7 +1,7 @@
 
 from linecache import getline
 
-from numpy import log2
+from numpy import log2, median
 import pandas as pd
 from pandas import IndexSlice as idx
 from pandas.api.extensions import register_dataframe_accessor
@@ -85,18 +85,18 @@ class ConcatenatedPileupTable:
         table = pd.read_csv(file_path, sep="\t", index_col=list(range(index_len)), header=[0, 1])
         return table
 
-    def simplify_for_reference_asymmetry(self, change_numerator, change_denominator,
-                                         add_ratio_column=True, log_transform_ratio=False,
-                                         add_fraction_column=True,
-                                         normalization_counts=None, normalization_factor=1,
-                                         row_groupings=None):
+    def calculate_reference_asymmetry(self, change_numerator, change_denominator,
+                                      add_ratio_column=True, log_transform_ratio=False,
+                                      add_fraction_column=True,
+                                      normalization_counts=None, normalization_factor=1,
+                                      row_groupings=None):
         if row_groupings is None:
-            row_groupings = ["project_id", "case_id", "file_id", "reference"]
+            row_groupings = [x for x in self._obj.index.names
+                             if x not in ["coding_strand", "orientation"]]
+            # row_groupings = ["project_id", "case_id", "file_id", "reference"]
         table = (self._obj
-                 .groupby(row_groupings)
-                 .agg(sum)
-                 .groupby("alt", axis=1)
-                 .agg(sum))
+                 .groupby(row_groupings).sum()
+                 .T.groupby("alt").sum().T)
         table = table.unstack(level=-1)[[tuple(reversed(change_numerator)),
                                          tuple(reversed(change_denominator))]]
         table.columns = [change_numerator, change_denominator]
@@ -118,18 +118,18 @@ class ConcatenatedPileupTable:
             table[ratio_label] = ratios
         return table
 
-    def simplify_for_transcription_asymmetry(self, change_numerator, change_denominator,
-                                             add_ratio_column=True, log_transform_ratio=False,
-                                             add_fraction_column=True,
-                                             normalization_counts=None, normalization_factor=1,
-                                             row_groupings=None):
+    def calculate_transcription_asymmetry(self, change_numerator, change_denominator,
+                                          add_ratio_column=True, log_transform_ratio=False,
+                                          add_fraction_column=True,
+                                          normalization_counts=None, normalization_factor=1,
+                                          row_groupings=None):
         if row_groupings is None:
-            row_groupings = ["project_id", "case_id", "file_id", "reference", "coding_strand"]
+            row_groupings = [x for x in self._obj.index.names
+                             if x not in ["orientation"]]
+            # row_groupings = ["project_id", "case_id", "file_id", "reference", "coding_strand"]
         table = (self._obj
-                 .groupby(row_groupings)
-                 .agg(sum)
-                 .groupby("alt", axis=1)
-                 .agg(sum))
+                 .groupby(row_groupings).sum()
+                 .T.groupby("alt").sum().T)
         table = table.unstack(level=-2)[[tuple(reversed(change_numerator)),
                                          tuple(reversed(change_denominator))]]
         table.columns = [change_numerator, change_denominator]
@@ -141,9 +141,9 @@ class ConcatenatedPileupTable:
                        + table.loc[reverse_slice, change_numerator].droplevel("coding_strand"))
         table = pd.DataFrame({change_numerator: numerator, change_denominator: denominator})
 
-        # if normalization_counts is not None:
-        #     for col in table.columns:
-        #         table[col] = table[col] / normalization_counts[col[0]] * normalization_factor
+        if normalization_counts is not None:
+            for col in table.columns:
+                table[col] = table[col] / normalization_counts[col[0]] * normalization_factor
 
         if add_ratio_column:
             ratio_label = f"{change_numerator}{change_denominator}_ratio".lower()
@@ -158,6 +158,67 @@ class ConcatenatedPileupTable:
             table[ratio_label] = ratios
         return table
 
+    def calculate_asymmetry(self, bias_type, change_numerator, change_denominator,
+                            add_ratio_column=True, log_transform_ratio=False,
+                            add_fraction_column=True,
+                            normalization_counts=None, normalization_factor=1,
+                            row_groupings=None):
+        params = locals().copy()
+        del params["bias_type"]
+        del params["self"]
+        if bias_type == "transcription":
+            return self.calculate_transcription_asymmetry(**params)
+        elif bias_type == "reference":
+            return self.calculate_reference_asymmetry(**params)
+        else:
+            raise ValueError("'bias_type' must be one of 'transcription' or 'reference', "
+                             f"not '{bias_type}'.")
+
+    def calculate_all_asymmetries(self, bias_type,
+                                  add_ratio_column=True,
+                                  log_transform_ratio=False,
+                                  add_fraction_column=True,
+                                  normalization_counts=None,
+                                  normalization_factor=1,
+                                  row_groupings=None):
+        params = locals().copy()
+        del params["self"]
+        table = pd.DataFrame()
+        for change, comp in zip(["TC", "CT", "TA", "TG", "CG", "GT"],
+                                ['AG', 'GA', 'AT', 'AC', 'GC', 'CA']):
+            data = self.calculate_asymmetry(change_numerator=change, change_denominator=comp,
+                                            **params)
+            name = f"{change}{comp}".lower()
+            cols = [change, comp]
+            if add_ratio_column:
+                cols.append("ratio")
+            if add_fraction_column:
+                cols.append("fraction")
+            data.columns = pd.MultiIndex.from_product([[f"{change}_{comp}"], cols])
+            table = pd.concat([table, data], axis=1)
+        return table
+
+    def calculate_all_median_asymmetries(self, bias_type, add_ratio_column=True,
+                                         log_transform_ratio=False,
+                                         add_fraction_column=True,
+                                         normalization_counts=None,
+                                         normalization_factor=1,
+                                         row_groupings=None):
+        params = locals().copy()
+        del params["self"]
+        table = pd.DataFrame()
+        for change, comp in zip(["TC", "CT", "TA", "TG", "CG", "GT"],
+                                ['AG', 'GA', 'AT', 'AC', 'GC', 'CA']):
+            data = self.calculate_asymmetry(change_numerator=change, change_denominator=comp,
+                                            **params)
+            name = f"{change}{comp}".lower()
+            cols = [f"{name}_ratio", f"{name}_fraction"] if add_fraction_column else [f"{name}_ratio"]
+            data = data[cols].groupby("project_id").median()
+            cols = ["ratio", "fraction"] if add_fraction_column else ["ratio"]
+            data.columns = pd.MultiIndex.from_product([[f"{change}_{comp}"], cols])
+            table = pd.concat([table, data], axis=1)
+        return table
+
     def subset_oxo_nucleotides(self):
         table = self._obj.loc[idx[:, ["C", "G"], :, :], ["A", "T"]]
         return table
@@ -165,24 +226,24 @@ class ConcatenatedPileupTable:
     def collapse_coding_regions(self):
         index_levels = list(self._obj.index.names)
         index_levels.remove("coding_strand")
-        table = self._obj.groupby(index_levels).agg(sum)
+        table = self._obj.groupby(index_levels).sum()
         return table
 
     def collapse_alignment_direction_columns(self):
-        table = self._obj.groupby("alt", axis=1).agg(sum)
+        table = self._obj.groupby("alt", axis=1).sum()
         return table
 
     def calculate_ref_strand_ox_bias(self):
         results = (self._obj.loc[idx[:, ["C", "G"], :, :], ["A", "T"]]
-                   .groupby("alt", axis=1).agg(sum)
-                   .groupby(["file_id", "reference"]).agg(sum))
+                   .groupby("alt", axis=1).sum()
+                   .groupby(["file_id", "reference"]).sum())
         results = results.loc[idx[:, "G"], "T"].droplevel("reference") / results.loc[idx[:, "C"], "A"].droplevel("reference")
         return results
 
     def plot_ref_strand_ox_scatter(self):
         results = (self._obj.loc[idx[:, ["C", "G"], :, :], ["A", "T"]]
-                   .groupby("alt", axis=1).agg(sum)
-                   .groupby(["file_id", "reference"]).agg(sum))
+                   .groupby("alt", axis=1).sum()
+                   .groupby(["file_id", "reference"]).sum())
         x = results.loc[idx[:, "G"], "T"]
         y = results.loc[idx[:, "C"], "A"]
         plot = go.Figure(go.Scatter(x=x, y=y, mode="markers", name="Samples"))
