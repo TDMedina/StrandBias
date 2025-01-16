@@ -1,8 +1,6 @@
 
 from collections import Counter, defaultdict
 from datetime import datetime
-from itertools import product
-from operator import invert
 
 from pybedtools import BedTool
 import pandas as pd
@@ -18,7 +16,6 @@ from scipy import stats
 from strand_bias.pileup_parser.pileup_table import ConcatenatedPileupTable
 from strand_bias.pileup_parser.call_table import CallTallyTable
 from strand_bias.TCGA_analysis.plotting import plot_single_call_asymmetry_box, plot_heatmap_of_unique_site_counts
-from strand_bias.pileup_parser.aggregate_asym_tables import read_capture_kit_nucleotide_summary
 from strand_bias.misc import gdc_api
 
 from capture_kit_counts import CaptureKit
@@ -33,25 +30,19 @@ from utilities import (
     )
 from plotting import (
     plot_mismatch_asymmetry,
-    # plot_mismatch_asym_per_change_per_project,
     plot_call_asymmetry,
-    plot_oxog_calls_vs_mismatches_per_project
     )
 pio.renderers.default = "browser"
 
 
 # %% Read data.
 
-# VCROME = read_capture_kit_nucleotide_summary("/home/tyler/Documents/Projects/StrandBias/VCRome.hg38.nt_counts.tsv")
-VCROME = CaptureKit.read_capture_kit_nucleotide_summary("/home/tyler/Documents/Projects/StrandBias/VCRome.hg38.nt_counts.tsv")
-mismatch_data = ConcatenatedPileupTable.read_csv("/home/tyler/StrandBias/Analysis/concatenated_asym_tables.rename.tsv")
-call_data = CallTallyTable.read_csv("/home/tyler/StrandBias/VCF_analysis/variant_filter_tally3.tsv")
-frequencies = pd.read_csv("/home/tyler/Documents/Projects/StrandBias/VCF_analysis/variant_frequencies.tsv",
-                          sep="\t", index_col=list(range(8)))
-call_data = call_data.join(frequencies)
+VCROME = CaptureKit.read_capture_kit_nucleotide_summary("./VCRome.hg38.nt_counts.tsv")
 
-# call_data = CallTable.read_csv("/home/tyler/StrandBias/Analysis/vcf_counts.tsv")
-# call_reference_asymmetry = call_data.call_tools.simplify_reference_asymmetry()
+# Modify the 3 file paths below to your data. Template headers are provided where required.
+mismatch_data = ConcatenatedPileupTable.read_csv("./mismatch_asymmetry.tcga.header_template.tsv")
+call_data = CallTallyTable.read_csv("./variant_asymmetry.tcga.header_template.tsv")
+_REF_GENOME = "<your_reference_genome.fa>"
 
 _proj_numbers = {y: x for x, y in enumerate(mismatch_data.index.levels[0], start=-4)}
 
@@ -248,10 +239,6 @@ mismatch_binom_results_min = calculate_binomtest_for_mismatches(
     minimum_raw_count=100
     )
 
-# mismatch_binom_results = calculate_binomtest_for_mismatches(
-#     mismatch_table=mismatch_data,
-#     )
-
 call_binom_results = calculate_binomtest_for_calls(
     call_table=call_data
     )
@@ -366,7 +353,6 @@ def calculate_call_mismatch_correlation(call_table, mismatch_table,
                            .droplevel("file_id"))
 
         call_subset = call_table.call_tools.calculate_reference_asymmetry(change, comp)
-        # call_subset = filter_call_dups(call_subset).droplevel("file_id")
 
         for filter_status in ["TOTAL", "PASS", "FAIL"]:
             combo = call_subset[filter_status].join(mismatch_subset,
@@ -601,7 +587,6 @@ def count_oxog_contexts(call_table, ref_genome):
 
 def make_oxog_context_table(oxog_context_counts, complement_C_contexts=True):
     table = pd.DataFrame()
-    # contexts = product("ACGT", "CG", "ACGT")
     for cohort, change_dict in oxog_context_counts.items():
         for change, counter in change_dict.items():
             for context, count in counter.items():
@@ -615,7 +600,7 @@ def make_oxog_context_table(oxog_context_counts, complement_C_contexts=True):
     table = table[sorted(table.columns)]
     return table
 
-oxog_contexts = count_oxog_contexts(call_data, "/home/tyler/Documents/Resource_Data/reference_genomes/GRCh38.d1.vd1.fa")
+oxog_contexts = count_oxog_contexts(call_data, _REF_GENOME)
 
 
 # %% Binomial simulation of TGCT.

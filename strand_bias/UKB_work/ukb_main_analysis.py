@@ -8,23 +8,21 @@ from plotly.subplots import make_subplots
 from scipy import stats
 
 from plot_help import VarCounts, PlotDirectory
-from hexbin import plot_hexbin
 from ukb_mismatch_table import UkbMismatchTable
 from ukb_variant_table import UkbVariantsUnstacked
 from strand_bias.TCGA_analysis.capture_kit_counts import CaptureKit
 
 # %% Read data.
-data_dir = Path("~/StrandBias/UKB_analysis/")
-var_dir = data_dir/"variant_reanalysis"
 
-mismatches = UkbMismatchTable.read_csv(data_dir/"asymmetry.tsv")
+# Modify the file paths below to your data. Template headers are provided where required.
+mismatches = UkbMismatchTable.read_csv("./mismatch_asymmetry.ukb.header_template.tsv")
 oxog_variants = VarCounts(
-    filtered=UkbVariantsUnstacked.read_csv(var_dir/"oxog_vars.snp_filtered.stats.project_ids.tsv"),
-    unfiltered=UkbVariantsUnstacked.read_csv(var_dir/"oxog_vars.unfiltered.stats.project_ids.tsv")
+    # Only one of the below arguments is required, but two can be used to generate
+    # plots for two datasets (filtered vs unfiltered) at the same time for comparison.
+    filtered=UkbVariantsUnstacked.read_csv("variant_asymmetry.ukb.header_template.tsv"),
+    unfiltered=UkbVariantsUnstacked.read_csv("variant_asymmetry.ukb.header_template.tsv")
     )
-xgen = CaptureKit.read_capture_kit_nucleotide_summary(
-    "/home/tyler/Documents/Resource_Data/capture_kits/IDT_xGen_Exome_Hyb_Panel/nt_counts.tsv"
-    )
+xgen = CaptureKit.read_capture_kit_nucleotide_summary("./xgen_nt_counts.tsv")
 
 # %% Plot everything.
 
@@ -33,7 +31,6 @@ plots = PlotDirectory(mismatches, oxog_variants,
                       mismatch_normalization_factor=1000,
                       variant_normalization_factor=1000000,
                       ratio_by_template=True)
-# plots2 = PlotDirectory(mismatches, oxog_variants)
 
 
 # %% Correlation testing.
@@ -70,16 +67,11 @@ def test_subset_correlation(mismatch_table, variant_tables: VarCounts, bias_type
         combo = table[["ratio"]].join(var_data.Hets, lsuffix="_m", rsuffix="_v")
         for test in (stats.spearmanr, stats.pearsonr):
             print(group, test(combo.ratio_m, combo.ratio_v))
-    # return upper_samples, lower_samples
 
 
 reference_bias_correlation = test_correlation(mismatches, oxog_variants, "reference")
 transcription_bias_correlation = test_correlation(mismatches, oxog_variants, "transcription")
 
-# %% Singleton Check.
-
-counts = pd.read_csv("/home/tyler/Documents/Projects/StrandBias/UKB_analysis/singleton_checking/top10singletons"
-                     ".unfiltered.counts.tsv", sep="\t", index_col=list(range(5)), header=0)
 
 # %% Paper figures
 
