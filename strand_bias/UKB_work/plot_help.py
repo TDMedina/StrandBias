@@ -3,7 +3,7 @@ from collections import namedtuple
 
 import plotly.graph_objects as go
 
-VarCounts = namedtuple("VarCounts", ["filtered", "unfiltered"])
+VarCounts = namedtuple("VarCounts", ["filtered", "unfiltered"], defaults=[None, None])
 
 
 class PlotDirectory:
@@ -30,17 +30,21 @@ class PlotDirectory:
 
 class PlotsByFilterStatus:
     def __init__(self, variant_table, normalization_data=None, normalization_factor=1, ratio_by_template=True):
-        self.unfiltered = PlotsByBiasType(variant_table.unfiltered, "variants", filtered=False,
+        self.unfiltered = (PlotsByBiasType(variant_table.unfiltered, "variants", filtered=False,
                                           normalization_data=normalization_data,
                                           normalization_factor=normalization_factor,
                                           ratio_by_template=ratio_by_template)
-        self.filtered = PlotsByBiasType(variant_table.filtered, "variants", filtered=True,
+                           if variant_table.unfiltered is not None else None)
+        self.filtered = (PlotsByBiasType(variant_table.filtered, "variants", filtered=True,
                                         normalization_data=normalization_data,
                                         normalization_factor=normalization_factor,
                                         ratio_by_template=ratio_by_template)
+                         if variant_table.unfiltered is not None else None)
 
     def show_all(self):
         for plots in [self.filtered, self.unfiltered]:
+            if plots is None:
+                continue
             plots.show_all()
 
 
